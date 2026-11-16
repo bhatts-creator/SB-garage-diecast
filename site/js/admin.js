@@ -528,7 +528,7 @@
           <span>${esc([it.id, it.series, it.year, it.color].filter(Boolean).join(' · '))}</span>
           ${it.tags.length ? `<span class="tg">${badgeHtml(it.tags)}</span>` : ''}
           ${it.review ? `<span class="review">${esc(it.review)}</span>` : ''}
-          <span class="links">${S.data.hasAiKey && it.photos.length ? `<button class="link" data-reid="${esc(it.id)}">✨ Identify</button>` : ''}<button class="link" data-edit="${esc(it.id)}">Full edit</button></span>
+          <span class="links">${it.name ? `<button class="link" data-web="${esc(it.id)}">🌐 Web photos</button>` : ''}${S.data.hasAiKey && it.photos.length ? `<button class="link" data-reid="${esc(it.id)}">✨ Identify</button>` : ''}<button class="link" data-edit="${esc(it.id)}">Full edit</button></span>
         </div>
       </div>
     </div>`;
@@ -597,8 +597,37 @@
     const items = parsePaste($('#pasteText').value);
     if (!items.length) { toast('Nothing to update — check the format', true); return; }
     const r = await saveMany(items, $('#pasteApply'));
-    if (r) { $('#pasteText').value = ''; pasteDlg.close(); }
+    if (!r) return;
+    $('#pasteText').value = '';
+    pasteDlg.close();
+    if ($('#pasteWeb').checked) addWebPhotosFor(r.results.map(x => x.item));
   });
+
+  // Web photos come from the Hot Wheels / Matchbox wikis (free), or Google/Brave images if a key is set.
+  async function addWebPhotosFor(items) {
+    const want = items.filter(it => it.name && it.photos.length < 3 &&
+      (/hot ?wheels|matchbox/i.test(it.brand) || S.data.hasSearchKey));
+    if (!want.length) return;
+    let done = 0, added = 0, i = 0;
+    toast(`Finding web photos for ${want.length} car${want.length > 1 ? 's' : ''}…`);
+    const worker = async () => {
+      while (i < want.length) {
+        const it = want[i++];
+        try {
+          const f = await G.timeout(api('findPhotos', { query: it, limit: 6 }), 60000);
+          if (f.photos && f.photos.length) {
+            const r = await G.timeout(api('addWebPhotos', { id: it.id, photos: f.photos.slice(0, 3) }), 90000);
+            mergeItem(r.item);
+            added += r.saved || 0;
+          }
+        } catch (e) { if (e.code === 401) return handleErr(e); }
+        done++;
+        toast(`Web photos: ${done}/${want.length} cars · ${added} photo${added === 1 ? '' : 's'} added`);
+      }
+    };
+    await Promise.all([worker(), worker()]);
+    renderTab();
+  }
 
   // ── photo zoom (read the card while you type) ──
   const zoomDlg = $('#zoomDlg');
@@ -628,6 +657,8 @@
     if (next) next.focus(); else $('#draftSaveAll').focus();
   });
   $('#stockList').addEventListener('click', e => {
+    const w = e.target.closest('[data-web]');
+    if (w) { w.textContent = '🌐 Finding…'; addWebPhotosFor([S.byId[w.dataset.web]]); return; }
     const z = e.target.closest('[data-zoom]');
     if (z) { $('#zoomImg').src = G.img(z.dataset.ref, 1400) || z.src; zoomDlg.showModal(); return; }
     const ri = e.target.closest('[data-reid]');
