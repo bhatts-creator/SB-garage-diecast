@@ -342,25 +342,50 @@
 
   function setGroupState(uid, state, text, sub) { B.st[uid] = { state, text, sub }; renderBulk(); }
 
+  const mergeItem = it => {
+    it.brand = G.normBrand(it.brand); it.tags = it.tags.map(G.normTag);
+    const idx = S.data.items.findIndex(x => x.id === it.id);
+    if (idx >= 0) S.data.items[idx] = it; else S.data.items.push(it);
+    S.byId[it.id] = it;
+    return it;
+  };
+  const subLine = (it, extra) => [it.id, it.brand, extra, it.price > 0 ? money(it.price) : 'needs price'].filter(Boolean).join(' · ');
+
+  // Step 1: save photo + draft row (fast). Step 2: AI reads the card, with a time limit.
+  // A slow or rate-limited AI never blocks the queue: the car is already saved.
   async function uploadGroup(g, opts) {
     const uid = g[0].uid;
+    let it;
     try {
       setGroupState(uid, 'busy', 'Compressing…');
       const photos = [];
       for (const f of g) photos.push({ data: await compress(f.file, 1600, 0.85) });
-      setGroupState(uid, 'busy', opts.ai ? 'Uploading + reading card…' : 'Uploading…');
-      const r = await api('bulkAdd', { photos, fileName: g[0].file.name, defaults: opts.defaults, ai: opts.ai, autoWeb: opts.autoWeb });
-      const it = r.item;
-      it.brand = G.normBrand(it.brand); it.tags = it.tags.map(G.normTag);
-      const idx = S.data.items.findIndex(x => x.id === it.id);
-      if (idx >= 0) S.data.items[idx] = it; else S.data.items.push(it);
-      S.byId[it.id] = it;
-      const sub = [it.id, it.brand, r.ai && r.ai.confidence ? 'AI ' + r.ai.confidence : '', it.price > 0 ? money(it.price) : 'needs price'].filter(Boolean).join(' · ');
-      setGroupState(uid, 'done', it.name || 'Untitled — add a name', sub);
+      setGroupState(uid, 'busy', 'Saving…');
+      const r = await G.timeout(api('bulkAdd', { photos, fileName: g[0].file.name, defaults: opts.defaults, ai: false, autoWeb: false }), 90000);
+      it = mergeItem(r.item);
     } catch (e) {
       if (e.code === 401) { handleErr(e); throw e; }
-      setGroupState(uid, 'err', '', e.message);
+      setGroupState(uid, 'err', '', e.message === 'timeout' ? 'Saving took too long — check the Stock tab before retrying' : e.message);
+      return;
     }
+    if (opts.ai) {
+      setGroupState(uid, 'busy', 'Saved ✓ Reading card…');
+      try {
+        const r = await G.timeout(api('reidentify', { id: it.id }), 75000);
+        it = mergeItem(r.item);
+        const conf = (it.review.match(/(high|medium|low) confidence/) || [])[1];
+        setGroupState(uid, 'done', it.name || 'Untitled — add a name', subLine(it, r.ok_ai ? 'AI ' + (conf || 'done') : 'AI: ' + (r.notes || [''])[0].slice(0, 40)));
+        return;
+      } catch (e) {
+        if (e.code === 401) { handleErr(e); throw e; }
+        setGroupState(uid, 'done', it.name || 'Saved — AI was slow', subLine(it, 'tap ✨ Identify in Drafts'));
+        return;
+      }
+    }
+    if (opts.autoWeb && it.name) {
+      try { it = mergeItem((await G.timeout(api('addWebPhotos', { id: it.id, photos: (await api('findPhotos', { query: it })).photos.slice(0, 3) }), 60000)).item); } catch (e) { /* optional */ }
+    }
+    setGroupState(uid, 'done', it.name || 'Untitled — add a name', subLine(it));
   }
 
   async function runBulk() {
@@ -378,8 +403,8 @@
     renderBulk();
     let i = 0;
     const worker = async () => { while (i < queue.length) await uploadGroup(queue[i++], opts); };
-    // Gemini's free tier allows only a few requests a minute — go one at a time
-    const lanes = opts.ai && S.data.aiProvider === 'gemini' ? 1 : 2;
+    // saving is quick, so run 3 at once; Gemini's free tier is a few requests a minute, so 2 when AI is on
+    const lanes = opts.ai && S.data.aiProvider === 'gemini' ? 2 : 3;
     try { await Promise.all(Array.from({ length: lanes }, worker)); } catch (e) { /* 401 handled */ }
     B.running = false;
     renderBulk();

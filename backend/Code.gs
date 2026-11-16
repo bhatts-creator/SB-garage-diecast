@@ -629,11 +629,13 @@ function identifyCarGemini_(photos) {
   parts.push({ text: AI_PROMPT + '\n\nReply with one JSON object with exactly these keys: ' + AI_SCHEMA.required.join(', ') +
     '. condition must be one of: ' + CONDITIONS.join(' | ') + ' (or empty).' });
   let useSchema = true;
+  let noThinking = true; // reading a label doesn't need the model's slow "thinking" step
   let res;
   let j = {};
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const gen = { responseMimeType: 'application/json', temperature: 0.2 };
     if (useSchema) gen.responseSchema = GEMINI_SCHEMA;
+    if (noThinking) gen.thinkingConfig = { thinkingBudget: 0 };
     res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
       method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key },
       payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: gen }), muteHttpExceptions: true,
@@ -641,13 +643,14 @@ function identifyCarGemini_(photos) {
     try { j = JSON.parse(res.getContentText() || '{}'); } catch (e) { j = {}; }
     const code = res.getResponseCode();
     const msg = (j.error && j.error.message) || '';
-    if (code === 400 && useSchema && /schema/i.test(msg)) { useSchema = false; continue; } // model rejects the schema → plain JSON mode
+    if (code === 400 && noThinking && /thinking/i.test(msg)) { noThinking = false; attempt--; continue; } // model can't turn thinking off
+    if (code === 400 && useSchema && /schema/i.test(msg)) { useSchema = false; attempt--; continue; } // model rejects the schema → plain JSON mode
     if (code === 429) {
       if (/per ?day|daily|PerDay/i.test(msg)) return { ok: false, note: 'Gemini free daily limit reached — tap ✨ Identify on the draft tomorrow, or fill it in yourself.' };
-      Utilities.sleep(8000 * (attempt + 1)); // free tier allows only a few requests a minute
+      if (attempt < 2) Utilities.sleep(6000 * (attempt + 1)); // free tier allows only a few requests a minute
       continue;
     }
-    if ([500, 502, 503].indexOf(code) >= 0) { Utilities.sleep(2000 * (attempt + 1)); continue; }
+    if ([500, 502, 503].indexOf(code) >= 0) { if (attempt < 2) Utilities.sleep(2000); continue; }
     break;
   }
   const code = res.getResponseCode();
