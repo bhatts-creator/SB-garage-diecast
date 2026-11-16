@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SB's Garage · Admin</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0b0c0f">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f2f3f5'/%3E%3Ctext x='32' y='42' font-family='Arial Black,Arial' font-weight='900' font-style='italic' font-size='24' text-anchor='middle' fill='%23ff5a1f'%3ESB%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <!-- login -->
+  <section class="login" id="login">
+    <form class="login-card" id="loginForm">
+      <div class="logo-mark">SB</div>
+      <h1>Admin</h1>
+      <p class="muted">Enter the admin key from <b>setup()</b> — or Sheet menu 🏁 SB's Garage → Show admin key.</p>
+      <input class="input" id="keyInput" type="password" placeholder="Admin key" autocomplete="current-password" required>
+      <button class="btn primary block" id="loginBtn">Unlock</button>
+      <p class="err" id="loginErr" hidden></p>
+    </form>
+  </section>
+
+  <div class="app" id="app" hidden>
+    <header class="a-top">
+      <div class="a-brand"><span class="logo-mark sm">SB</span><span id="aStore">Admin</span></div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="add" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+        <button data-tab="stock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg><span>Stock</span><i class="dot" id="stockDot" hidden></i></button>
+        <button data-tab="sales"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10M7 9h10M10 14l6 6M7 14h3a5 5 0 0 0 0-10"/></svg><span>Sales</span></button>
+        <button data-tab="enq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z"/></svg><span>Enquiries</span><i class="dot" id="enqDot" hidden></i></button>
+        <button data-tab="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Stats</span></button>
+      </nav>
+      <div class="a-actions">
+        <a class="btn small ghost" href="./" target="_blank" rel="noopener">View store ↗</a>
+        <button class="icon-btn" id="reload" aria-label="Reload data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+      </div>
+    </header>
+
+    <main class="a-main">
+      <!-- ADD / EDIT -->
+      <section class="panel" data-panel="add">
+        <div class="panel-head">
+          <h2 id="formTitle">Add a car</h2>
+          <div class="seg" id="addMode" role="group" aria-label="Add mode">
+            <button type="button" data-mode="one" aria-pressed="true">One car</button>
+            <button type="button" data-mode="bulk" aria-pressed="false">Bulk upload</button>
+          </div>
+          <button class="btn small" id="cancelEdit" hidden>Cancel edit</button>
+        </div>
+
+        <!-- BULK -->
+        <div class="bulk" id="bulkBox" hidden>
+          <label class="drop bulk-drop" id="bulkDrop">
+            <input type="file" id="bulkInput" accept="image/*" multiple hidden>
+            <span class="drop-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/><path d="M3 16l4-4 3 3 3-3 4 4"/></svg>
+              <b>Select photos — as many as you like</b><span>Each car becomes a draft row in your sheet. Add price & qty later.</span>
+            </span>
+          </label>
+          <div class="bulk-opts" id="bulkOpts" hidden>
+            <label class="field">Photos per car
+              <select class="select input" id="bulkPer"><option value="1">1 photo = 1 car</option><option value="2">2 photos = 1 car (front + back)</option><option value="3">3 photos = 1 car</option></select>
+            </label>
+            <label class="field">Brand <span class="hint">if all the same</span><input class="input" id="bulkBrand" list="dlBrands" placeholder="Leave blank if mixed"></label>
+            <label class="field">Series <span class="hint">optional</span><input class="input" id="bulkSeries" list="dlSeries"></label>
+            <label class="field">Condition<select class="select input" id="bulkCond"></select></label>
+            <label class="field">Qty each<input class="input" id="bulkQty" type="number" inputmode="numeric" min="0" value="1"></label>
+            <label class="field">Price each ₹ <span class="hint">blank = draft</span><input class="input" id="bulkPrice" type="number" inputmode="numeric" min="0" placeholder="e.g. 199 for all mainlines"></label>
+            <div class="field span3">Tags for all <span class="hint">optional</span><div class="tag-picker" id="bulkTags"></div></div>
+            <label class="check span3" id="bulkAiRow"><input type="checkbox" id="bulkAi" checked> <span>✨ <b>Identify each car with AI</b> — reads the card: name, car maker, series, year, colour, TH / STH</span></label>
+            <p class="muted small span3" id="bulkAiOff" hidden>AI identify is off. Add a free <b>GEMINI_API_KEY</b> (from aistudio.google.com) in Apps Script → Project Settings → Script properties to turn it on. Without it, rows get the photo + your defaults (and the file name as the car name, if it isn't IMG_1234).</p>
+            <label class="check span3"><input type="checkbox" id="bulkWeb"> Also add web photos to each car (slower)</label>
+          </div>
+          <div class="bulk-grid" id="bulkGrid"></div>
+          <div class="bulk-bar" id="bulkBar" hidden>
+            <span id="bulkSummary" class="muted"></span>
+            <button type="button" class="btn ghost small" id="bulkClear">Clear</button>
+            <button type="button" class="btn primary" id="bulkStart">Upload</button>
+          </div>
+        </div>
+
+        <form id="itemForm" class="item-form" autocomplete="off">
+          <div class="photo-col">
+            <label class="drop" id="drop">
+              <input type="file" id="photoInput" accept="image/*" hidden>
+              <img id="photoPreview" alt="" hidden>
+              <span class="drop-empty" id="dropEmpty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                <b>Tap to add your photo</b><span>Camera or gallery · auto-compressed</span>
+              </span>
+            </label>
+            <button type="button" class="btn small block ai-fill" id="aiFill" hidden>✨ Fill details from photo</button>
+            <div class="cur-photos" id="curPhotos" hidden></div>
+            <div class="web-box">
+              <div class="web-head">
+                <b>Web photos</b>
+                <button type="button" class="btn small" id="findPhotos">Find photos</button>
+              </div>
+              <label class="check"><input type="checkbox" id="autoWeb" checked> Auto-add top 3 if I don't pick</label>
+              <div class="web-grid" id="webGrid"></div>
+              <p class="muted small" id="webNote"></p>
+            </div>
+          </div>
+
+          <div class="fields">
+            <label class="field span2">Car name *<input class="input" name="name" required placeholder="e.g. Nissan Skyline GT-R (R34)"></label>
+            <label class="field">Brand *<input class="input" name="brand" list="dlBrands" required placeholder="Hot Wheels"></label>
+            <label class="field">Car maker<input class="input" name="make" list="dlMakes" placeholder="Nissan"></label>
+            <label class="field">Series<input class="input" name="series" list="dlSeries" placeholder="HW J-Imports / Car Culture…"></label>
+            <label class="field">Year<input class="input" name="year" inputmode="numeric" placeholder="2024"></label>
+            <label class="field">Colour<input class="input" name="color" placeholder="Spectraflame blue"></label>
+            <label class="field">Condition<select class="select input" name="condition" id="condSel"></select></label>
+            <div class="field span2">Tags
+              <div class="tag-picker" id="tagPicker"></div>
+              <div class="tag-add"><input class="input" id="tagCustom" placeholder="Custom tag (e.g. Boulevard)"><button type="button" class="btn small" id="tagAddBtn">Add</button></div>
+            </div>
+            <label class="field">Price ₹ *<input class="input" name="price" type="number" inputmode="numeric" min="0" required></label>
+            <label class="field">Qty *<input class="input" name="qty" type="number" inputmode="numeric" min="0" value="1" required></label>
+            <label class="field">Compare-at ₹ <span class="hint">shows a strikethrough</span><input class="input" name="compareAt" type="number" inputmode="numeric" min="0"></label>
+            <label class="field">Your cost ₹ <span class="hint">private · for profit</span><input class="input" name="cost" type="number" inputmode="numeric" min="0"></label>
+            <label class="field span2">Notes <span class="hint">shown on the product page</span><textarea class="input" name="notes" rows="2" placeholder="Card condition, blister, anything a collector should know"></textarea></label>
+            <label class="check span2"><input type="checkbox" name="hidden"> Hide from store</label>
+            <button class="btn primary block span2 save" id="saveBtn">Save car</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- STOCK -->
+      <section class="panel" data-panel="stock" hidden>
+        <div class="panel-head">
+          <h2>Stock</h2>
+          <span class="muted" id="stockSummary"></span>
+        </div>
+        <div class="filters-row">
+          <input class="input" id="stockQ" type="search" placeholder="Search name, ID, brand, maker, tag…">
+          <select class="select input" id="stockF">
+            <option value="all">All</option><option value="in">In stock</option><option value="out">Sold out</option><option value="drafts">Drafts (need price)</option><option value="hidden">Hidden</option><option value="nophoto">No photo</option>
+          </select>
+        </div>
+        <div class="stock-list" id="stockList"></div>
+      </section>
+
+      <!-- SALES -->
+      <section class="panel" data-panel="sales" hidden>
+        <div class="panel-head">
+          <h2>Sales</h2>
+          <button class="btn primary small" id="newSale">+ Record sale</button>
+        </div>
+        <div class="filters-row">
+          <select class="select input" id="salesMonth"></select>
+          <select class="select input" id="salesTag"></select>
+          <select class="select input" id="salesChannel"></select>
+        </div>
+        <div class="kpis small" id="salesKpis"></div>
+        <div class="orders" id="ordersList"></div>
+      </section>
+
+      <!-- ENQUIRIES -->
+      <section class="panel" data-panel="enq" hidden>
+        <div class="panel-head">
+          <h2>Enquiries</h2>
+          <select class="select input auto" id="enqF"><option value="New">New</option><option value="Converted">Converted</option><option value="Lost">Lost</option><option value="all">All</option></select>
+        </div>
+        <p class="muted small">Every “Order on WhatsApp” from the site lands here with a Ref (ENQ-0007). Match it to the chat, then convert it to a sale in one tap.</p>
+        <div class="enq-list" id="enqList"></div>
+      </section>
+
+      <!-- STATS -->
+      <section class="panel" data-panel="stats" hidden>
+        <div class="panel-head">
+          <h2>Stats</h2>
+          <select class="select input auto" id="statsRange">
+            <option value="all">All time</option><option value="month">This month</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="year">This year</option>
+          </select>
+        </div>
+        <div class="kpis" id="kpis"></div>
+        <div class="breakdowns" id="breakdowns"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- record sale -->
+  <dialog class="sheet" id="saleDlg">
+    <form class="sheet-inner" id="saleForm" method="dialog" autocomplete="off">
+      <div class="sheet-head">
+        <h2 id="saleTitle">Record a sale</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="sheet-body">
+        <div class="lines" id="saleLines"></div>
+        <div class="add-line">
+          <input class="input" id="linePick" list="dlItems" placeholder="+ Add car: type name or ID">
+        </div>
+        <div class="sale-total"><span>Order total</span><strong id="saleTotal">₹0</strong></div>
+        <div class="grid2">
+          <label class="field">Buyer<input class="input" name="buyer" list="dlBuyers" placeholder="Name / @handle"></label>
+          <label class="field">Contact<input class="input" name="contact" placeholder="Phone / Instagram"></label>
+          <label class="field">City<input class="input" name="city"></label>
+          <label class="field">Date<input class="input" name="date" type="date"></label>
+          <label class="field">Channel<select class="select input" name="channel" id="chanSel"></select></label>
+          <label class="field">Payment<select class="select input" name="payment" id="paySel"></select></label>
+          <label class="field span2">Revenue tag <span class="hint">campaign / drop / source — e.g. “Diwali drop”, “IG live 12 Nov”</span><input class="input" name="tag" list="dlTags"></label>
+          <label class="field span2">Notes<input class="input" name="notes" placeholder="Shipping, tracking no., anything"></label>
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button type="submit" class="btn primary block" id="saleSave" value="save">Save sale & reduce stock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <datalist id="dlBrands"></datalist><datalist id="dlMakes"></datalist><datalist id="dlSeries"></datalist>
+  <datalist id="dlItems"></datalist><datalist id="dlBuyers"></datalist><datalist id="dlTags"></datalist>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="config.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

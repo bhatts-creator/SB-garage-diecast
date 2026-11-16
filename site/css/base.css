@@ -1,0 +1,127 @@
+/* SB's Garage — tokens + shared components */
+:root {
+  --bg: #0b0c0f;
+  --surface: #14161b;
+  --surface-2: #1b1e25;
+  --surface-3: #242832;
+  --line: #2a2e38;
+  --ink: #f2f3f5;
+  --ink-2: #b3b8c2;
+  --ink-3: #7d838f;
+  --accent: #ff5a1f;
+  --accent-2: #ff7a45;
+  --accent-ink: #120700;
+  --gold: #f5c542;
+  --good: #3ddc84;
+  --warn: #ffb020;
+  --danger: #ff4d4f;
+  --wa: #25d366;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; display: block; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 42px; padding: 0 16px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface-2); color: var(--ink);
+  font-weight: 650; font-size: 14px; letter-spacing: .01em;
+  transition: background .15s, border-color .15s, transform .08s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-3); }
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: var(--accent-2); }
+.btn.wa { background: var(--wa); border-color: var(--wa); color: #04210f; }
+.btn.ghost { background: transparent; }
+.btn.small { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.btn.block { width: 100%; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.icon-btn {
+  display: inline-grid; place-items: center; width: 40px; height: 40px;
+  border: 1px solid var(--line); border-radius: 50%; background: var(--surface-2); color: var(--ink);
+}
+.icon-btn svg { width: 20px; height: 20px; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; font-size: 13px; }
+
+/* ── inputs ── */
+.input, .select, textarea.input {
+  width: 100%; min-height: 42px; padding: 9px 12px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--ink); outline: none;
+}
+.input:focus, .select:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--ink-3); }
+.select { appearance: none; padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23b3b8c2' stroke-width='1.8' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; }
+.field { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; }
+.field > span.hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-3); }
+
+/* ── chips ── */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 13px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  color: var(--ink-2); font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.chip:hover { color: var(--ink); border-color: var(--ink-3); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip .count { font-weight: 500; opacity: .6; font-size: 12px; }
+
+/* ── badges (tags) ── */
+.badge {
+  display: inline-flex; align-items: center; height: 21px; padding: 0 7px;
+  border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  background: rgba(20, 22, 27, .85); color: var(--ink); border: 1px solid rgba(255, 255, 255, .14);
+  backdrop-filter: blur(6px);
+}
+.b-sth { background: linear-gradient(135deg, #ffe27a, #d9a414); color: #2a1d00; border-color: #ffe9a3; box-shadow: 0 0 14px rgba(245, 197, 66, .45); }
+.b-rlc { background: #c8102e; color: #fff; border-color: #ff5a6e; }
+.b-th { background: linear-gradient(135deg, #f4f5f7, #a9adb5); color: #15171b; border-color: #fff; }
+.b-chase { background: #111; color: #9ff27a; border-color: #9ff27a; }
+.b-rare { background: #ff3b3b; color: #fff; border-color: #ff8a8a; }
+.b-tt { background: #1f6feb; color: #fff; border-color: #6aa3ff; }
+.b-prem { background: #6d4aff; color: #fff; border-color: #a891ff; }
+.b-silver { background: linear-gradient(135deg, #e6e8ec, #8d939d); color: #15171b; border-color: #f2f3f5; }
+.b-5pk { background: #0fb5a4; color: #031b18; border-color: #63e6d8; }
+.b-main { background: rgba(20, 22, 27, .85); color: var(--ink-2); }
+
+/* ── dialog / drawer / toast ── */
+dialog { padding: 0; border: 0; color: var(--ink); background: transparent; max-width: none; max-height: none; }
+dialog::backdrop { background: rgba(5, 6, 8, .72); backdrop-filter: blur(3px); }
+.toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 90;
+  transform: translate(-50%, 30px); opacity: 0; pointer-events: none;
+  padding: 11px 18px; border-radius: 999px; background: var(--ink); color: var(--bg);
+  font-weight: 650; font-size: 14px; box-shadow: var(--shadow); transition: .25s; max-width: calc(100vw - 32px); text-align: center;
+}
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
+.toast.err { background: var(--danger); color: #fff; }
+
+.muted { color: var(--ink-3); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.skeleton { background: linear-gradient(90deg, var(--surface) 0, var(--surface-2) 50%, var(--surface) 100%); background-size: 800px 100%; animation: shimmer 1.3s infinite linear; }
