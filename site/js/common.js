@@ -90,10 +90,24 @@
   async function getCatalog(fresh) {
     if (DEMO) { await loadScript('js/demo-data.js'); return window.G64_DEMO_CATALOG(); }
     const url = cfg.API_URL + (cfg.API_URL.includes('?') ? '&' : '?') + 'action=catalog' + (fresh ? '&fresh=1' : '');
-    const res = await fetch(url);
-    const j = await res.json();
+    const j = await getJson(url);
     if (!j.ok) throw new Error(j.error || 'Could not load catalog');
     return j;
+  }
+
+  // Turns Apps Script's usual failure modes into messages a human can act on
+  async function getJson(url, init) {
+    let res;
+    try { res = await fetch(url, init); } catch (e) {
+      throw new Error('Could not reach the backend. Check the URL in config.js, that it ends in /exec, and that the deployment exists.');
+    }
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (e) {
+      if (/accounts\.google\.com|ServiceLogin|Sign in/i.test(text)) throw new Error('Backend asks for a Google login — redeploy the Web App with "Who has access: Anyone".');
+      if (/Script function not found: doGet|doPost/i.test(text)) throw new Error('Backend has no doGet/doPost — paste the full Code.gs and deploy a new version.');
+      const m = text.match(/<div[^>]*>([^<]{10,200})<\/div>/);
+      throw new Error('Backend returned an error page' + (m ? ': ' + m[1].trim() : '') + '. Open check.html for details.');
+    }
   }
 
   async function post(action, payload) {
@@ -101,16 +115,11 @@
       if (action === 'enquiry') return { ok: true, enquiryId: 'DEMO-' + Math.floor(Math.random() * 9000 + 1000) };
       throw new Error('Demo mode — add your API_URL in config.js to use the admin panel.');
     }
-    const res = await fetch(cfg.API_URL, {
+    const j = await getJson(cfg.API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // "simple" request → no CORS preflight
       body: JSON.stringify(Object.assign({ action: action }, payload || {})),
     });
-    const text = await res.text();
-    let j;
-    try { j = JSON.parse(text); } catch (e) {
-      throw new Error('Backend did not return JSON. Is the Web App deployed with access "Anyone"?');
-    }
     if (!j.ok) { const err = new Error(j.error || 'Request failed'); err.code = j.code; throw err; }
     return j;
   }
@@ -119,6 +128,6 @@
 
   window.G64 = {
     cfg, DEMO, TAGS, tagDef, normTag, normBrand, normMake, JDM,
-    money, esc, img, imgTag, PLACEHOLDER, getCatalog, post, timeout,
+    money, esc, img, imgTag, PLACEHOLDER, getCatalog, post, timeout, getJson,
   };
 })();

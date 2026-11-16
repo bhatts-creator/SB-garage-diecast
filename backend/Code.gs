@@ -25,6 +25,8 @@
  */
 
 const CFG = {
+  // Your Google Sheet. Lets the backend work even if this script wasn't created from inside the sheet.
+  SHEET_ID: '1VUDWEkzEmgrA8B8nuncihIj0g8QlPLUPhY_FLYXf0fI',
   INV: 'Inventory',
   SALES: 'Sales',
   ENQ: 'Enquiries',
@@ -84,7 +86,7 @@ const ID_PREFIX = {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   try {
-    if (p.action === 'ping') return json_({ ok: true, at: new Date().toISOString() });
+    if (p.action === 'ping') return json_(diagnose_());
     let s = p.fresh ? null : cacheGet_(CFG.CACHE_KEY);
     if (!s) {
       s = JSON.stringify(buildCatalog_());
@@ -94,6 +96,34 @@ function doGet(e) {
   } catch (err) {
     return json_({ ok: false, error: errMsg_(err) });
   }
+}
+
+/** What /exec?action=ping reports — used by site/check.html. */
+function diagnose_() {
+  const out = { ok: true, at: new Date().toISOString(), version: 3 };
+  try {
+    const ss = ss_();
+    out.sheetName = ss.getName();
+    out.sheetId = ss.getId();
+    out.tabs = ss.getSheets().map(s => s.getName());
+    out.missingTabs = [CFG.INV, CFG.SALES, CFG.ENQ, CFG.SETTINGS].filter(n => out.tabs.indexOf(n) < 0);
+    out.setupDone = out.missingTabs.length === 0 && !!prop_('ADMIN_KEY');
+    if (out.tabs.indexOf(CFG.INV) >= 0) {
+      const t = readTable_(CFG.INV);
+      const items = t.rows.map(r => itemFromRow_(t, r)).filter(i => i.id);
+      out.rows = items.length;
+      out.live = items.filter(i => i.name && i.price > 0 && !i.hidden).length;
+      out.drafts = items.filter(i => !i.name || !(i.price > 0)).length;
+    }
+    out.settings = readSettings_();
+  } catch (e) {
+    out.ok = false;
+    out.error = errMsg_(e);
+  }
+  out.adminKeySet = !!prop_('ADMIN_KEY');
+  out.photoFolder = !!prop_('PHOTO_FOLDER_ID');
+  out.aiProvider = aiProvider_();
+  return out;
 }
 
 const ADMIN_ACTIONS = {
@@ -1125,7 +1155,17 @@ function buildDashboard_() {
 
 /* ═════════════════════════════  TABLE HELPERS  ═════════════════════════════ */
 
-function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
+let SS_CACHE_ = null;
+function ss_() {
+  if (SS_CACHE_) return SS_CACHE_;
+  let ss = null;
+  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) { ss = null; }
+  const id = prop_('SHEET_ID') || CFG.SHEET_ID;
+  if (!ss && id) ss = SpreadsheetApp.openById(id);
+  if (!ss) throw new Error('No spreadsheet linked. Create this script from the sheet (Extensions → Apps Script) or set CFG.SHEET_ID.');
+  SS_CACHE_ = ss;
+  return ss;
+}
 
 function readTable_(name) {
   const sh = ss_().getSheetByName(name);

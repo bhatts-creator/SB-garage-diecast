@@ -595,7 +595,7 @@
         $('#grid').innerHTML = '';
         $('#empty').hidden = false;
         $('#empty .empty-title').textContent = 'Couldn’t load the shelf.';
-        $('#empty p.muted').textContent = 'Check your connection and refresh. (' + e.message + ')';
+        $('#empty p.muted').innerHTML = G.esc(e.message) + ' <a href="check.html">Run the setup check →</a>';
       }
     }
   }

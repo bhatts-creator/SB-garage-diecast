@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SB's Garage · Setup Check</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <style>
+    main { max-width: 720px; margin: 0 auto; padding: 32px 16px 60px; }
+    h1 { font-size: 28px; font-weight: 900; font-style: italic; font-stretch: 118%; text-transform: uppercase; margin: 0 0 6px; }
+    .steps { list-style: none; padding: 0; margin: 24px 0; display: grid; gap: 10px; }
+    .step { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+    .step .ic { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 14px; background: var(--surface-3); color: var(--ink-3); }
+    .step.ok .ic { background: rgba(61, 220, 132, .16); color: var(--good); }
+    .step.bad { border-color: rgba(255, 77, 79, .5); }
+    .step.bad .ic { background: rgba(255, 77, 79, .16); color: var(--danger); }
+    .step.warn .ic { background: rgba(255, 176, 32, .16); color: var(--warn); }
+    .step b { display: block; font-size: 15px; }
+    .step p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+    .step .fix { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; color: var(--ink); }
+    .step .fix ol { margin: 4px 0 0; padding-left: 18px; }
+    code { background: var(--surface-3); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; word-break: break-all; }
+    .row { display: flex; gap: 8px; margin-top: 8px; }
+    .row .input { flex: 1; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Setup check</h1>
+    <p class="muted">Tests every link from this site to your Google Sheet. Fix the first red step, then hit Re-run.</p>
+    <ol class="steps" id="steps"></ol>
+    <div class="row"><input class="input" id="key" type="password" placeholder="Optional: admin key, to test admin login"><button class="btn primary" id="run">Re-run</button></div>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+  (() => {
+    const G = window.G64, esc = G.esc, $ = s => document.querySelector(s);
+    const SHEET_STEPS = '<ol><li>Open your Google Sheet → <b>Extensions → Apps Script</b>.</li><li>Paste the latest <code>backend/Code.gs</code> from GitHub over everything, Save.</li><li>Pick <b>setup</b> in the function dropdown → <b>Run</b> → allow permissions (Advanced → Go to project).</li><li><b>Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy</b>. The URL stays the same.</li></ol>';
+    const add = (state, title, detail, fix) => {
+      $('#steps').insertAdjacentHTML('beforeend', `<li class="step ${state}"><span class="ic">${state === 'ok' ? '✓' : state === 'bad' ? '✕' : '!'}</span><div><b>${title}</b>${detail ? `<p>${detail}</p>` : ''}${fix ? `<div class="fix">${fix}</div>` : ''}</div></li>`);
+    };
+    async function run() {
+      $('#steps').innerHTML = '';
+      const url = G.cfg.API_URL;
+      // 1. config
+      if (!url) return add('bad', 'No backend URL in config.js', 'The store is in demo mode.', 'Edit <code>site/config.js</code> on GitHub and paste your Web App URL (ends in <code>/exec</code>).');
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) add('warn', 'Backend URL looks unusual', esc(url), 'It should look like <code>https://script.google.com/macros/s/…/exec</code> — not <code>/dev</code>, not the editor link.');
+      else add('ok', 'config.js has a backend URL', esc(url.slice(0, 60)) + '…');
+      // 2. ping
+      let d;
+      try { d = await G.getJson(url + '?action=ping'); }
+      catch (e) { return add('bad', 'Backend not reachable', esc(e.message), 'In Apps Script: <b>Deploy → Manage deployments</b>. Check it is a <b>Web app</b>, Execute as <b>Me</b>, Who has access <b>Anyone</b>. Copy that URL into config.js.'); }
+      add('ok', 'Backend responds');
+      // 3. version
+      if (!d.version || d.version < 3) add('bad', 'Backend code is old', 'The deployed script is an earlier Code.gs.', SHEET_STEPS);
+      // 4. sheet
+      if (!d.ok) return add('bad', 'Backend can\'t open the sheet', esc(d.error || ''), SHEET_STEPS);
+      add('ok', 'Linked to sheet: ' + esc(d.sheetName || ''), 'Tabs: ' + esc((d.tabs || []).join(', ')));
+      if (!d.setupDone) return add('bad', 'setup hasn\'t been run', d.missingTabs && d.missingTabs.length ? 'Missing tabs: ' + esc(d.missingTabs.join(', ')) : 'No admin key yet.', SHEET_STEPS);
+      add('ok', 'Sheet tabs + admin key are set up');
+      // 5. settings
+      const s = d.settings || {};
+      const wa = String(s.whatsappNumber || '').replace(/\D/g, '');
+      if (!wa || wa === '919999999999') add('warn', 'WhatsApp number not set', 'Orders would go to the placeholder number.', 'Sheet → <b>Settings</b> tab → <b>WhatsApp Number</b>, e.g. <code>919876543210</code>.');
+      else add('ok', 'WhatsApp orders go to +' + esc(wa));
+      // 6. catalog
+      try {
+        const c = await G.getCatalog(true);
+        if (!c.items.length) add('warn', 'Store is empty', `${d.rows || 0} row(s) in Inventory, ${d.drafts || 0} draft(s). A car shows once it has a <b>Name</b> and a <b>Price</b> and Hide is unticked.`, 'Add a car in <a href="admin.html">admin</a>, or type a row in the Inventory sheet (Name, Brand, Price, Qty).');
+        else add('ok', `Store is live with ${c.items.length} car(s)`, d.drafts ? `${d.drafts} draft(s) still need a name or price.` : '');
+      } catch (e) { add('bad', 'Catalog failed', esc(e.message)); }
+      // 7. AI
+      if (!d.aiProvider) add('warn', 'AI photo reading is off', 'Bulk upload still works; you type names yourself.', 'Get a free key at <b>aistudio.google.com</b> → Apps Script → Project Settings → Script properties → <code>GEMINI_API_KEY</code>.');
+      else add('ok', 'AI photo reading: ' + esc(d.aiProvider));
+      if (!d.photoFolder) add('warn', 'Drive photo folder not created yet', 'It is created on the first upload or by running setup.');
+      // 8. admin key
+      const key = $('#key').value.trim();
+      if (key) {
+        try { await G.post('login', { key }); add('ok', 'Admin key works'); }
+        catch (e) { add('bad', 'Admin key rejected', esc(e.message), 'Sheet menu <b>🏁 SB\'s Garage → Show admin key</b>, or Apps Script → Project Settings → Script properties → <code>ADMIN_KEY</code>.'); }
+      }
+    }
+    $('#run').addEventListener('click', run);
+    run();
+  })();
+  </script>
+</body>
+</html>
