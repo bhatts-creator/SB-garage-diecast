@@ -22,7 +22,13 @@
     mode: 'one',
     bulk: { files: [], st: {}, tags: new Set(), running: false, uid: 0 },
   };
-  const isDraft = it => !it.name || !(it.price > 0);
+  const isDraft = it => !it.hidden && (!it.name || !(it.price > 0));
+  const dupKey = it => (it.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + (it.modelNo || '').replace(/\s/g, '');
+  const dupOf = it => {
+    if (!it.name || it.hidden) return null;
+    const k = dupKey(it);
+    return S.data.items.find(x => x !== it && !x.hidden && x.name && dupKey(x) === k) || null;
+  };
 
   const api = (action, payload) => G.post(action, Object.assign({ key: S.key }, payload || {}));
 
@@ -363,6 +369,7 @@
       for (const f of g) photos.push({ data: await compress(f.file, 1600, 0.85) });
       setGroupState(uid, 'busy', 'Saving…');
       const r = await G.timeout(api('bulkAdd', { photos, fileName: g[0].file.name, defaults: opts.defaults, ai: false, autoWeb: false }), 90000);
+      if (r.duplicate) { setGroupState(uid, 'done', 'Already uploaded', `same photo as ${r.item.id} · skipped`); return; }
       it = mergeItem(r.item);
     } catch (e) {
       if (e.code === 401) { handleErr(e); throw e; }
@@ -398,7 +405,7 @@
         tags: [...B.tags], qty: $('#bulkQty').value, price: $('#bulkPrice').value,
       },
       ai: !!S.data.hasAiKey && $('#bulkAi').checked,
-      autoWeb: $('#bulkWeb').checked,
+      autoWeb: false, // web photos showed other versions of the casting, so only your own photos are used
     };
     B.running = true;
     renderBulk();
@@ -494,7 +501,7 @@
         ${G.imgTag(it.photos[0], 160, '', 'loading="lazy"')}
         <div>
           <div class="t">${esc(it.name)}</div>
-          <div class="s">${esc([it.id, it.brand, it.make, it.series].filter(Boolean).join(' · '))}${it.hidden ? ' · <span class="pill">hidden</span>' : ''}${!it.photos.length ? ' · <span class="pill warn">no photo</span>' : ''}</div>
+          <div class="s">${esc([it.id, it.brand, it.make, it.series, it.modelNo].filter(Boolean).join(' · '))}${it.hidden ? ' · <span class="pill">hidden</span>' : ''}${dupOf(it) ? ` · <span class="pill warn">same as ${esc(dupOf(it).id)}?</span>` : ''}${!it.photos.length ? ' · <span class="pill warn">no photo</span>' : ''}</div>
           ${it.tags.length ? `<div class="tg">${badgeHtml(it.tags)}</div>` : ''}
         </div>
         <div class="r">
@@ -528,7 +535,7 @@
           <span>${esc([it.id, it.series, it.year, it.color].filter(Boolean).join(' · '))}</span>
           ${it.tags.length ? `<span class="tg">${badgeHtml(it.tags)}</span>` : ''}
           ${it.review ? `<span class="review">${esc(it.review)}</span>` : ''}
-          <span class="links">${it.name ? `<button class="link" data-web="${esc(it.id)}">🌐 Web photos</button>` : ''}${S.data.hasAiKey && it.photos.length ? `<button class="link" data-reid="${esc(it.id)}">✨ Identify</button>` : ''}<button class="link" data-edit="${esc(it.id)}">Full edit</button></span>
+          <span class="links">${S.data.hasAiKey && it.photos.length ? `<button class="link" data-reid="${esc(it.id)}">✨ Identify</button>` : ''}<button class="link" data-edit="${esc(it.id)}">Full edit</button></span>
         </div>
       </div>
     </div>`;
@@ -600,7 +607,6 @@
     if (!r) return;
     $('#pasteText').value = '';
     pasteDlg.close();
-    if ($('#pasteWeb').checked) addWebPhotosFor(r.results.map(x => x.item));
   });
 
   // Web photos come from the Hot Wheels / Matchbox wikis (free), or Google/Brave images if a key is set.

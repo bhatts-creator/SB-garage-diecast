@@ -17,6 +17,7 @@
     sort: 'new',
     cart: ls.get(CART_KEY) || {},
     openFacets: new Set(), makeQ: '', pdpPushed: false, pdpId: null,
+    closedFacets: new Set(ls.get('g64_closed_facets') || []),
   };
 
   /* ═══════════ data prep ═══════════ */
@@ -28,8 +29,9 @@
     const cutoff = Date.now() - Number(s.newBadgeDays || 7) * 864e5;
     const showSold = !/^(no|false|0|hide)$/i.test(String(s.showSoldOut || 'yes').trim());
     const items = (cat.items || []).map(raw => {
-      const tags = uniq((raw.tags || []).map(G.normTag));
       const brand = G.normBrand(raw.brand);
+      let tags = uniq((raw.tags || []).map(G.normTag));
+      if (PREMIUM_BRANDS.includes(brand)) tags = uniq(tags.filter(t => t !== 'Mainline').concat('Premium'));
       const make = raw.make ? G.normMake(raw.make) : '';
       const rank = tags.reduce((m, t) => Math.max(m, (G.tagDef(t) || {}).rank || 0), 0);
       const labels = tags.map(t => (G.tagDef(t) || {}).label || '');
@@ -110,26 +112,35 @@
     return state.cart[it.id] ? 'In cart ✓' : 'Add to cart';
   }
 
+  const priceText = it => (it.price > 0 ? money(it.price) : 'Ask for price');
+
+  // brands that only make premium models: never "Mainline"
+  const PREMIUM_BRANDS = ['Mini GT', 'Kaido House', 'Inno64', 'Pop Race', 'Tarmac Works', 'Greenlight', 'M2 Machines'];
+
   function card(it) {
     const sold = it.qty <= 0;
-    const off = it.compareAt && it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
+    const off = it.price > 0 && it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
     const sub = [it.series, it.year].filter(Boolean).join(' · ');
     const meta = [it.brand, it.make].filter(Boolean).join(' · ');
+    const pics = (it.photos.length ? it.photos : ['']).slice(0, 6);
     return `<article class="card${sold ? ' is-sold' : ''}" data-id="${esc(it.id)}">
-      <button class="card-media" data-open="${esc(it.id)}" aria-label="View ${esc(it.name)}">
-        ${G.imgTag(it.photos[0], 600, it.name, 'loading="lazy" decoding="async"')}
+      <div class="card-media" data-open="${esc(it.id)}" role="button" tabindex="0" aria-label="View ${esc(it.name)}">
+        <div class="cm-track">${pics.map((p, i) => G.imgTag(p, 600, i ? '' : it.name, 'loading="lazy" decoding="async" draggable="false"')).join('')}</div>
         <span class="badges">${badges(it, 3)}</span>
-        ${it.isNew && !sold ? '<span class="ribbon">NEW</span>' : ''}
         ${off && !sold ? `<span class="discount">-${off}%</span>` : ''}
         ${sold ? '<span class="sold-stamp">SOLD</span>' : ''}
-      </button>
+        ${pics.length > 1 ? `
+          <button class="cm-nav cm-prev" data-cm="-1" aria-label="Previous photo">‹</button>
+          <button class="cm-nav cm-next" data-cm="1" aria-label="Next photo">›</button>
+          <span class="cm-dots">${pics.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</span>` : ''}
+      </div>
       <div class="card-body">
         <div class="card-meta">${esc(meta)}</div>
         <h3 class="card-title"><button data-open="${esc(it.id)}">${esc(it.name)}</button></h3>
         ${sub ? `<div class="card-sub">${esc(sub)}</div>` : ''}
         <div class="card-foot">
-          <span class="price">${money(it.price)}${it.compareAt > it.price ? `<s>${money(it.compareAt)}</s>` : ''}</span>
-          ${sold ? '' : `<span class="stock${it.qty === 1 ? ' low' : ''}">${it.qty === 1 ? 'Last one' : it.qty + ' in stock'}</span>`}
+          <span class="price">${priceText(it)}${it.price > 0 && it.compareAt > it.price ? `<s>${money(it.compareAt)}</s>` : ''}</span>
+          ${sold ? '' : `<span class="stock">Qty ${it.qty}</span>`}
         </div>
         <button class="btn small add${state.cart[it.id] ? ' in' : ''}" data-add="${esc(it.id)}" ${sold ? 'disabled' : ''}>${addLabel(it)}</button>
       </div>
@@ -182,9 +193,12 @@
       const all = counts(fc);
       el.hidden = all.length < 2 && !state.f[fc.key].size;
       if (!el.dataset.ready) {
-        el.innerHTML = `<h3>${fc.title}</h3>${fc.search ? `<input class="input facet-search" data-facet-search placeholder="Search makers…" hidden>` : ''}<div class="opts"></div><button class="link more" hidden></button>`;
+        el.innerHTML = `<button class="facet-head" data-collapse="${fc.key}" aria-expanded="true"><h3>${fc.title}</h3><span class="chev" aria-hidden="true"></span></button>${fc.search ? `<input class="input facet-search" data-facet-search placeholder="Search makers…" hidden>` : ''}<div class="opts"></div><button class="link more" hidden></button>`;
         el.dataset.ready = '1';
       }
+      const closed = state.closedFacets.has(fc.key);
+      el.classList.toggle('closed', closed);
+      el.querySelector('.facet-head').setAttribute('aria-expanded', !closed);
       const search = el.querySelector('[data-facet-search]');
       if (search) search.hidden = all.length <= 10;
       let shown = all;
@@ -318,7 +332,7 @@
     const photos = it.photos.length ? it.photos : [''];
     const specs = [['Brand', it.brand], ['Car maker', it.make], ['Series', it.series], ['Year', it.year],
       ['Colour', it.color], ['Condition', it.condition], ['Model no.', it.modelNo], ['Item code', it.id]].filter(s => s[1]);
-    const off = it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
+    const off = it.price > 0 && it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
     $('#pdpInner').innerHTML = `
       <button class="icon-btn pdp-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       <div class="gallery">
@@ -334,10 +348,10 @@
         <div class="meta">${esc([it.brand, it.make].filter(Boolean).join(' · '))}</div>
         <h2>${esc(it.name)}</h2>
         <div class="pdp-price">
-          <span class="price">${money(it.price)}${off ? `<s>${money(it.compareAt)}</s>` : ''}</span>
+          <span class="price">${priceText(it)}${off ? `<s>${money(it.compareAt)}</s>` : ''}</span>
           ${off ? `<span class="save">You save ${money(it.compareAt - it.price)}</span>` : ''}
         </div>
-        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : it.qty === 1 ? 'Last one on the shelf' : it.qty + ' in stock'}${inCart ? ` · ${inCart} in your cart` : ''}</div>
+        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : 'Qty ' + it.qty + ' in stock'}${inCart ? ` · ${inCart} in your cart` : ''}</div>
         ${sold ? '' : `<div class="buy-row">
           <div class="stepper" aria-label="Quantity">
             <button data-pq="-1" aria-label="Less" ${pdpQty <= 1 ? 'disabled' : ''}>−</button><span>${pdpQty}</span><button data-pq="1" aria-label="More" ${pdpQty >= room ? 'disabled' : ''}>+</button>
@@ -471,7 +485,7 @@
       const q = Math.min(l.qty, it.qty);
       return `<div class="line">
         ${G.imgTag(it.photos[0], 160, it.name)}
-        <div><div class="t">${esc(it.name)}</div><div class="s">${esc(it.brand)} · ${money(it.price)}${q > 1 ? ' each' : ''}</div></div>
+        <div><div class="t">${esc(it.name)}</div><div class="s">${esc(it.brand)} · ${priceText(it)}${q > 1 && it.price > 0 ? ' each' : ''}</div></div>
         <div class="r">
           <div class="stepper"><button data-cart-q="${esc(it.id)}" data-d="-1" aria-label="Less">−</button><span>${q}</span><button data-cart-q="${esc(it.id)}" data-d="1" aria-label="More" ${q >= it.qty ? 'disabled' : ''}>+</button></div>
           <button class="rm" data-cart-rm="${esc(it.id)}">Remove</button>
@@ -479,7 +493,8 @@
       </div>`;
     }).join('');
     const total = live.reduce((s, l) => s + l.it.price * Math.min(l.qty, l.it.qty), 0);
-    $('#cartTotal').textContent = money(total);
+    const ask = live.filter(l => !(l.it.price > 0)).length;
+    $('#cartTotal').textContent = money(total) + (ask ? ` + ${ask} on request` : '');
     $('#cartShip').textContent = state.settings.shippingNote || '';
   }
 
@@ -628,6 +643,14 @@
     state.makeQ = e.target.value; renderFacets();
   });
   $('#filters').addEventListener('click', e => {
+    const c = e.target.closest('[data-collapse]');
+    if (c) {
+      const k = c.dataset.collapse;
+      state.closedFacets.has(k) ? state.closedFacets.delete(k) : state.closedFacets.add(k);
+      ls.set('g64_closed_facets', [...state.closedFacets]);
+      renderFacets();
+      return;
+    }
     const m = e.target.closest('[data-toggle]');
     if (!m) return;
     const k = m.dataset.toggle;
@@ -659,15 +682,39 @@
   $('#emptyClear').addEventListener('click', clearAll);
 
   $('#grid').addEventListener('click', e => {
+    const nav = e.target.closest('[data-cm]');
+    if (nav) {
+      const tr = nav.closest('.card-media').querySelector('.cm-track');
+      tr.scrollBy({ left: Number(nav.dataset.cm) * tr.clientWidth, behavior: 'smooth' });
+      return;
+    }
     const add = e.target.closest('[data-add]');
     if (add) { const it = state.byId[add.dataset.add]; state.cart[it.id] ? openCart() : addToCart(it.id, 1); return; }
     const open = e.target.closest('[data-open]');
     if (open) openItem(open.dataset.open, true);
   });
 
+  $('#grid').addEventListener('keydown', e => {
+    const m = e.target.closest('.card-media');
+    if (m && (e.key === 'Enter' || e.key === ' ') && e.target === m) { e.preventDefault(); openItem(m.dataset.open, true); }
+  });
+  let dotRaf = 0;
+  $('#grid').addEventListener('scroll', e => {
+    if (!e.target.classList || !e.target.classList.contains('cm-track')) return;
+    const tr = e.target;
+    cancelAnimationFrame(dotRaf);
+    dotRaf = requestAnimationFrame(() => {
+      const i = Math.round(tr.scrollLeft / tr.clientWidth);
+      tr.parentElement.querySelectorAll('.cm-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+    });
+  }, true);
+
   $('#cartBtn').addEventListener('click', openCart);
   $('#closeCart').addEventListener('click', closePanels);
   $('#scrim').addEventListener('click', closePanels);
+  const applySideHidden = () => document.body.classList.toggle('filters-hidden', !!ls.get('g64_hide_filters'));
+  applySideHidden();
+  $('#toggleSide').addEventListener('click', () => { ls.set('g64_hide_filters', !ls.get('g64_hide_filters')); applySideHidden(); });
   $('#openFilters').addEventListener('click', () => { $('#filters').classList.add('open'); $('#scrim').hidden = false; document.body.style.overflow = 'hidden'; });
   $('#closeFilters').addEventListener('click', closePanels);
   $('#showResults').addEventListener('click', () => { closePanels(); window.scrollTo({ top: $('.toolbar').offsetTop - 70, behavior: 'smooth' }); });

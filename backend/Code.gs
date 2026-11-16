@@ -43,7 +43,7 @@ const CFG = {
 
 const HEADERS = {};
 HEADERS[CFG.INV] = ['ID', 'Thumb', 'Name', 'Brand', 'Manufacturer', 'Series', 'Year', 'Color', 'Condition',
-  'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review', 'Model No'];
+  'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review', 'Model No', 'Photo Hash'];
 HEADERS[CFG.SALES] = ['Order ID', 'Date', 'Item ID', 'Item Name', 'Brand', 'Qty', 'Unit Price', 'Total',
   'Unit Cost', 'Profit', 'Buyer', 'Contact', 'City', 'Channel', 'Payment', 'Revenue Tag', 'Enquiry ID', 'Notes'];
 HEADERS[CFG.ENQ] = ['Enquiry ID', 'Date', 'Name', 'Contact', 'City', 'Buyer Note', 'Items', 'Item IDs', 'Total', 'Status', 'Notes'];
@@ -57,6 +57,7 @@ const DEFAULT_SETTINGS = [
   ['Announcement', 'New drop every Sunday 8 PM · Shipping across India'],
   ['Shipping Note', 'Shipping ₹80 flat, free above ₹1,500. Bubble-wrapped & boxed.'],
   ['Show Sold Out', 'Yes'],
+  ['Show Unpriced', 'No'],
   ['New Badge Days', '7'],
 ];
 
@@ -64,7 +65,7 @@ const DEFAULT_SETTINGS = [
 const FIELD_TO_COL = {
   name: 'Name', brand: 'Brand', make: 'Manufacturer', series: 'Series', year: 'Year', color: 'Color',
   condition: 'Condition', tags: 'Tags', price: 'Price', compareAt: 'Compare At', qty: 'Qty', cost: 'Cost',
-  hidden: 'Hide', notes: 'Notes', review: 'Review', modelNo: 'Model No',
+  hidden: 'Hide', notes: 'Notes', review: 'Review', modelNo: 'Model No', photoHash: 'Photo Hash',
 };
 const NUMERIC_FIELDS = ['price', 'compareAt', 'qty', 'cost'];
 
@@ -75,6 +76,21 @@ const CHANNELS = ['Website', 'Instagram', 'Facebook group', 'Meetup / in person'
 const PAYMENTS = ['UPI', 'Cash', 'Bank transfer', 'Card', 'Other'];
 const ENQ_STATUSES = ['New', 'Converted', 'Lost'];
 
+// brands that only make premium models: a "Mainline" tag on these is always a mistake
+const PREMIUM_BRANDS = ['mini gt', 'kaido house', 'inno64', 'pop race', 'tarmac works', 'greenlight', 'm2 machines'];
+function fixTags_(brand, tags) {
+  if (PREMIUM_BRANDS.indexOf(str_(brand).toLowerCase()) < 0) return tags;
+  const out = tags.filter(t => t !== 'Mainline');
+  if (out.indexOf('Premium') < 0) out.push('Premium');
+  return out;
+}
+function photoHash_(dataUrl) {
+  const m = String(dataUrl).match(/^data:[^;]+;base64,(.*)$/);
+  const bytes = Utilities.base64Decode(m ? m[1] : dataUrl);
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, bytes)
+    .map(b => ('0' + ((b + 256) % 256).toString(16)).slice(-2)).join('');
+}
+
 const ID_PREFIX = {
   'hot wheels': 'HW', 'hotwheels': 'HW', 'mini gt': 'MGT', 'minigt': 'MGT', 'kaido house': 'KH',
   'inno64': 'INNO', 'inno 64': 'INNO', 'pop race': 'PR', 'poprace': 'PR', 'matchbox': 'MB',
@@ -84,7 +100,7 @@ const ID_PREFIX = {
 /* ═════════════════════════════  HTTP API  ═════════════════════════════ */
 
 /** First request after deploying sets the sheet up by itself — no need to run setup() by hand. */
-const SETUP_VERSION = 5;
+const SETUP_VERSION = 6;
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
   if (cache.get('setup_ok_' + SETUP_VERSION)) return; // versioned: new code re-checks the sheet at once
@@ -186,15 +202,18 @@ function buildCatalog_() {
     t = readTable_(CFG.INV);
   }
   const items = [];
+  const settings = readSettings_();
+  const showUnpriced = truthy_(settings.showUnpriced);
   t.rows.forEach(r => {
     const it = itemFromRow_(t, r);
-    if (!it.id || !it.name || it.hidden || !(it.price > 0)) return; // drafts stay off the store
+    if (!it.id || !it.name || it.hidden) return;
+    if (!(it.price > 0) && !showUnpriced) return; // drafts stay off the store (Settings → Show Unpriced)
     delete it.cost;
     delete it.hidden;
     delete it.review;
     items.push(it);
   });
-  return { ok: true, settings: readSettings_(), items: items, generatedAt: new Date().toISOString() };
+  return { ok: true, settings: settings, items: items, generatedAt: new Date().toISOString() };
 }
 
 function itemFromRow_(t, r) {
@@ -498,6 +517,11 @@ function setEnquiryStatus_(id, status) {
 function bulkAdd_(body) {
   const photos = (body.photos || []).filter(p => p && p.data).slice(0, 4);
   if (!photos.length) throw new Error('No photo');
+  // the exact same photo uploaded again → don't create a second row
+  const hash = photoHash_(photos[0].data);
+  const t0 = readTable_(CFG.INV);
+  const dup = t0.rows.find(r => str_(get_(t0, r, 'Photo Hash')) === hash && !truthy_(get_(t0, r, 'Hide')));
+  if (dup) return { duplicate: true, item: itemFromRow_(t0, dup), notes: ['Same photo as ' + get_(t0, dup, 'ID') + ', skipped'] };
   const d = body.defaults || {};
   const notes = [];
   let car = {};
@@ -528,7 +552,9 @@ function bulkAdd_(body) {
     qty: num_(d.qty) == null ? 1 : num_(d.qty),
     price: num_(d.price) == null ? '' : num_(d.price),
     review: review,
+    photoHash: hash,
   };
+  item.tags = fixTags_(item.brand, item.tags);
   const res = saveItem_({ item: item, newPhotos: photos, draft: true, autoWeb: !!body.autoWeb && !!item.name });
   res.notes = notes.concat(res.notes || []);
   res.ai = body.ai ? { ok: !!car.name, confidence: car.confidence || '', note: car.seller_note || '' } : null;
@@ -555,7 +581,7 @@ function reidentify_(body) {
     Object.keys(fill).forEach(k => { if (!cur[k] && fill[k]) upd[k] = fill[k]; });
     const tags = cur.tags.slice();
     c.tags.forEach(x => { if (tags.indexOf(x) < 0) tags.push(x); });
-    upd.tags = tags;
+    upd.tags = fixTags_(upd.brand || cur.brand, tags);
     upd.review = c.is_diecast === false ? 'AI: this does not look like a diecast car'
       : 'AI · ' + c.confidence + ' confidence' + (c.seller_note ? ' · ' + c.seller_note : '');
   } else {
@@ -1084,6 +1110,10 @@ function setup() {
     set.setColumnWidth(2, 460);
     styleHeader_(set);
   }
+
+  // add settings introduced in newer versions
+  const have = set.getDataRange().getValues().map(r => str_(r[0]));
+  DEFAULT_SETTINGS.filter(s => have.indexOf(s[0]) < 0).forEach(s => set.appendRow(s));
 
   buildDashboard_();
 
