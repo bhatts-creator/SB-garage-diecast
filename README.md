@@ -40,7 +40,7 @@ A store for selling your Hot Wheels / Mini GT / Kaido House / Inno64 / Pop Race 
 2. In the sheet's **Settings** tab set your **WhatsApp Number** (with country code, e.g. `919876543210`), store name, tagline, Instagram, announcement bar, shipping note.
 3. Host the `site` folder (pick one):
    - **Netlify Drop** (fastest): go to app.netlify.com/drop, drag the `site` folder in. Done. Add a custom domain later.
-   - **GitHub Pages**: push `site/` to a repo → Settings → Pages.
+   - **GitHub Pages** (already set up for this repo): Settings → Pages → Branch `main`, folder `/ (root)`. Store: `https://bhatts-creator.github.io/sb-garage-diecast/`, admin: `…/site/admin.html`.
    - **Vercel**: `vercel deploy site`.
 4. Open `https://your-site/admin.html`, paste the admin key, add your first car.
 
