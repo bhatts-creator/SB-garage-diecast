@@ -43,7 +43,7 @@ const CFG = {
 
 const HEADERS = {};
 HEADERS[CFG.INV] = ['ID', 'Thumb', 'Name', 'Brand', 'Manufacturer', 'Series', 'Year', 'Color', 'Condition',
-  'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review'];
+  'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review', 'Model No'];
 HEADERS[CFG.SALES] = ['Order ID', 'Date', 'Item ID', 'Item Name', 'Brand', 'Qty', 'Unit Price', 'Total',
   'Unit Cost', 'Profit', 'Buyer', 'Contact', 'City', 'Channel', 'Payment', 'Revenue Tag', 'Enquiry ID', 'Notes'];
 HEADERS[CFG.ENQ] = ['Enquiry ID', 'Date', 'Name', 'Contact', 'City', 'Buyer Note', 'Items', 'Item IDs', 'Total', 'Status', 'Notes'];
@@ -64,7 +64,7 @@ const DEFAULT_SETTINGS = [
 const FIELD_TO_COL = {
   name: 'Name', brand: 'Brand', make: 'Manufacturer', series: 'Series', year: 'Year', color: 'Color',
   condition: 'Condition', tags: 'Tags', price: 'Price', compareAt: 'Compare At', qty: 'Qty', cost: 'Cost',
-  hidden: 'Hide', notes: 'Notes', review: 'Review',
+  hidden: 'Hide', notes: 'Notes', review: 'Review', modelNo: 'Model No',
 };
 const NUMERIC_FIELDS = ['price', 'compareAt', 'qty', 'cost'];
 
@@ -84,7 +84,7 @@ const ID_PREFIX = {
 /* ═════════════════════════════  HTTP API  ═════════════════════════════ */
 
 /** First request after deploying sets the sheet up by itself — no need to run setup() by hand. */
-const SETUP_VERSION = 4;
+const SETUP_VERSION = 5;
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
   if (cache.get('setup_ok_' + SETUP_VERSION)) return; // versioned: new code re-checks the sheet at once
@@ -216,6 +216,7 @@ function itemFromRow_(t, r) {
     hidden: truthy_(get_(t, r, 'Hide')),
     notes: str_(get_(t, r, 'Notes')),
     review: str_(get_(t, r, 'Review')),
+    modelNo: str_(get_(t, r, 'Model No')), // number printed on the card, e.g. 72/250 or HRV11
     photos: photosOf_(t, r),
     added: added instanceof Date ? added.getTime() : (Date.parse(added) || 0),
     n: r.row,
@@ -1133,7 +1134,7 @@ function formatInventory_(sh) {
     t.rows.forEach(r => { if (str_(get_(t, r, 'ID'))) setThumb_(t, r.row); });
     sh.setColumnWidth(col('Thumb'), 70);
   }
-  ['ID', 'Name', 'Year', 'Tags', 'Photo', 'Web Photos'].forEach(h => {
+  ['ID', 'Name', 'Year', 'Tags', 'Photo', 'Web Photos', 'Model No'].forEach(h => {
     if (t.idx[h] != null) sh.getRange(2, col(h), max - 1, 1).setNumberFormat('@');
   });
   ['Price', 'Compare At', 'Cost'].forEach(h => {

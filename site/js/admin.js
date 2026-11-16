@@ -158,7 +158,7 @@
     resetForm(false);
     setMode('one');
     S.edit = id;
-    ['name', 'brand', 'make', 'series', 'year', 'color', 'notes'].forEach(k => { form[k].value = it[k] || ''; });
+    ['name', 'brand', 'make', 'series', 'year', 'color', 'notes', 'modelNo'].forEach(k => { form[k].value = it[k] || ''; });
     form.condition.value = it.condition || '';
     ['price', 'qty', 'compareAt', 'cost'].forEach(k => { form[k].value = it[k] == null ? '' : it[k]; });
     form.hidden.checked = !!it.hidden;
@@ -237,7 +237,7 @@
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const item = {};
-    ['name', 'brand', 'make', 'series', 'year', 'color', 'condition', 'notes'].forEach(k => { item[k] = form[k].value.trim(); });
+    ['name', 'brand', 'make', 'series', 'year', 'color', 'condition', 'notes', 'modelNo'].forEach(k => { item[k] = form[k].value.trim(); });
     ['price', 'qty', 'compareAt', 'cost'].forEach(k => { item[k] = form[k].value; });
     item.brand = G.normBrand(item.brand);
     item.hidden = form.hidden.checked;
@@ -482,7 +482,7 @@
       if (f === 'nophoto' && it.photos.length) return false;
       if (f === 'drafts' && !isDraft(it)) return false;
       if (!q) return true;
-      return [it.id, it.name, it.brand, it.make, it.series, it.color, ...it.tags].join(' ').toLowerCase().includes(q);
+      return [it.id, it.name, it.brand, it.make, it.series, it.color, it.modelNo, ...it.tags].join(' ').toLowerCase().includes(q);
     }).sort(f === 'drafts' ? (a, b) => a.n - b.n : (a, b) => (b.added || 0) - (a.added || 0) || b.n - a.n);
     renderDraftBar();
     const live = S.data.items.filter(i => i.qty > 0 && !i.hidden && !isDraft(i));
@@ -567,7 +567,7 @@
   window.addEventListener('beforeunload', e => { if (Object.keys(S.dirty).length) { e.preventDefault(); e.returnValue = ''; } });
 
   // ── paste details (from Claude, a spreadsheet, anywhere) ──
-  const PCOLS = ['id', 'name', 'brand', 'make', 'series', 'year', 'color', 'condition', 'tags', 'price', 'qty'];
+  const PCOLS = ['id', 'name', 'brand', 'make', 'series', 'year', 'color', 'condition', 'tags', 'price', 'qty', 'modelNo'];
   function parsePaste(text) {
     const t = text.trim();
     if (!t) return [];

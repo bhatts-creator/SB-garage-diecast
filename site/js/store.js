@@ -33,7 +33,7 @@
       const make = raw.make ? G.normMake(raw.make) : '';
       const rank = tags.reduce((m, t) => Math.max(m, (G.tagDef(t) || {}).rank || 0), 0);
       const labels = tags.map(t => (G.tagDef(t) || {}).label || '');
-      const hay = norm([raw.name, brand, make, raw.series, raw.year, raw.color, raw.condition, raw.id, ...tags, ...labels].join(' '));
+      const hay = norm([raw.name, brand, make, raw.series, raw.year, raw.color, raw.condition, raw.id, raw.modelNo, ...tags, ...labels].join(' '));
       return Object.assign({}, raw, {
         brand, make, tags, rank, hay, hayC: hay.replace(/[^a-z0-9]/g, ''),
         price: Number(raw.price) || 0, qty: Number(raw.qty) || 0, photos: raw.photos || [],
@@ -317,7 +317,7 @@
     pdpQty = Math.min(Math.max(1, pdpQty), Math.max(1, room));
     const photos = it.photos.length ? it.photos : [''];
     const specs = [['Brand', it.brand], ['Car maker', it.make], ['Series', it.series], ['Year', it.year],
-      ['Colour', it.color], ['Condition', it.condition], ['Item code', it.id]].filter(s => s[1]);
+      ['Colour', it.color], ['Condition', it.condition], ['Model no.', it.modelNo], ['Item code', it.id]].filter(s => s[1]);
     const off = it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
     $('#pdpInner').innerHTML = `
       <button class="icon-btn pdp-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>

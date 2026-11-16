@@ -120,6 +120,7 @@
             <label class="field">Series<input class="input" name="series" list="dlSeries" placeholder="HW J-Imports / Car Culture…"></label>
             <label class="field">Year<input class="input" name="year" inputmode="numeric" placeholder="2024"></label>
             <label class="field">Colour<input class="input" name="color" placeholder="Spectraflame blue"></label>
+            <label class="field">Model no. <span class="hint">number on the card</span><input class="input" name="modelNo" placeholder="72/250 or HRV11"></label>
             <label class="field">Condition<select class="select input" name="condition" id="condSel"></select></label>
             <div class="field span2">Tags
               <div class="tag-picker" id="tagPicker"></div>
@@ -237,7 +238,7 @@
         <button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div class="sheet-body">
-        <p class="muted small" style="margin:0">One car per line, columns separated by <b>|</b> or tabs (you can paste straight from a sheet). Leave a column empty to keep what's there.<br><code>ID | Name | Brand | Maker | Series | Year | Colour | Condition | Tags | Price | Qty</code></p>
+        <p class="muted small" style="margin:0">One car per line, columns separated by <b>|</b> or tabs (you can paste straight from a sheet). Leave a column empty to keep what's there.<br><code>ID | Name | Brand | Maker | Series | Year | Colour | Condition | Tags | Price | Qty | Model no.</code></p>
         <textarea class="input" id="pasteText" rows="10" placeholder="DC-0004 | Mercedes-AMG G 63 | Mini GT | Mercedes-AMG | | | Dark Blue Metallic | Boxed | Premium | 1499 | 1"></textarea>
         <label class="check"><input type="checkbox" id="pasteWeb" checked> Also add up to 3 web photos per car (free for Hot Wheels &amp; Matchbox)</label>
         <p class="small" id="pastePreview"></p>
