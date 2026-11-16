@@ -308,6 +308,8 @@
     const gs = bulkGroups();
     const has = B.files.length > 0;
     $('#bulkOpts').hidden = !has;
+    $('#bulkMore').hidden = !has || B.running;
+    $('#bulkCount').textContent = has ? `${B.files.length} photo${B.files.length > 1 ? 's' : ''} selected` : '';
     $('#bulkBar').hidden = !has;
     $('#bulkPer').disabled = B.running || gs.some(g => gst(g).state === 'done');
     $('#bulkGrid').innerHTML = gs.map((g, i) => {
@@ -387,11 +389,28 @@
     toast(failed ? `${failed} failed — tap Retry` : 'All uploaded ✓ Drafts are highlighted yellow in your sheet');
   }
 
-  $('#bulkInput').addEventListener('change', e => {
-    [...e.target.files].forEach(file => B.files.push({ uid: ++B.uid, file, url: URL.createObjectURL(file) }));
-    e.target.value = '';
+  function addBulkFiles(list) {
+    const seen = new Set(B.files.map(f => f.file.name + '|' + f.file.size));
+    const imgs = [...list].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })); // keeps front/back pairs together
+    let added = 0;
+    imgs.forEach(file => {
+      const k = file.name + '|' + file.size;
+      if (seen.has(k)) return; // same photo picked twice
+      seen.add(k);
+      B.files.push({ uid: ++B.uid, file, url: URL.createObjectURL(file) });
+      added++;
+    });
+    if (added) toast(`Added ${added} photo${added > 1 ? 's' : ''} · ${B.files.length} total`);
     renderBulk();
-  });
+  }
+  $('#bulkInput').addEventListener('change', e => { addBulkFiles(e.target.files); e.target.value = ''; });
+  $('#bulkFolder').addEventListener('change', e => { addBulkFiles(e.target.files); e.target.value = ''; });
+  $('#bulkMore').addEventListener('click', () => $('#bulkInput').click());
+  const drop = $('#bulkDrop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => addBulkFiles(e.dataTransfer.files));
   $('#bulkPer').addEventListener('change', renderBulk);
   $('#bulkGrid').addEventListener('click', e => {
     const r = e.target.closest('[data-brm]');

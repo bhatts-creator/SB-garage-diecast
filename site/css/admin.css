@@ -82,6 +82,9 @@
 /* bulk upload */
 .bulk { display: grid; gap: 16px; }
 .bulk-drop { aspect-ratio: auto; min-height: 170px; }
+.bulk-drop.over { border-color: var(--accent); background: var(--surface-2); }
+.bulk-pick { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: -6px; }
+@media (pointer: coarse) { .folder-pick { display: none !important; } }
 .bulk-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
 .span3 { grid-column: 1 / -1; }
 .bulk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
