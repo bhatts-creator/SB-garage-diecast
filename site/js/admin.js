@@ -484,6 +484,7 @@
       if (!q) return true;
       return [it.id, it.name, it.brand, it.make, it.series, it.color, ...it.tags].join(' ').toLowerCase().includes(q);
     }).sort(f === 'drafts' ? (a, b) => a.n - b.n : (a, b) => (b.added || 0) - (a.added || 0) || b.n - a.n);
+    renderDraftBar();
     const live = S.data.items.filter(i => i.qty > 0 && !i.hidden && !isDraft(i));
     const drafts = S.data.items.filter(isDraft).length;
     $('#stockSummary').innerHTML = `${live.length} listings · ${live.reduce((s, i) => s + i.qty, 0)} cars · ${money(live.reduce((s, i) => s + i.qty * (i.price || 0), 0))}` +
@@ -507,58 +508,128 @@
       : '<div class="empty-state">No cars here yet. Add one from the <b>Add</b> tab — or type rows straight into the Inventory sheet.</div>');
   }
 
+  // ── fast draft editor: type everything, save once ──
+  S.dirty = {};
+  const DFIELDS = ['name', 'brand', 'make', 'price', 'qty'];
   function draftRow(it) {
-    return `<div class="srow draft" data-did="${esc(it.id)}">
-      ${G.imgTag(it.photos[0], 160, '', 'loading="lazy"')}
+    const d = S.dirty[it.id] || {};
+    const v = f => esc(d[f] !== undefined ? d[f] : (f === 'price' ? (it.price > 0 ? it.price : '') : it[f] == null ? '' : it[f]));
+    return `<div class="srow draft${S.dirty[it.id] ? ' dirty' : ''}" data-did="${esc(it.id)}">
+      ${G.imgTag(it.photos[0], 300, '', 'loading="lazy" data-zoom')}
       <div>
-        <input class="input qn" data-dname value="${esc(it.name)}" placeholder="Car name" aria-label="Car name">
-        <div class="s">${esc([it.id, it.brand, it.make, it.series, it.year, it.color].filter(Boolean).join(' · '))}</div>
-        ${it.tags.length ? `<div class="tg">${badgeHtml(it.tags)}</div>` : ''}
-        ${it.review ? `<div class="review">${esc(it.review)}</div>` : ''}
-      </div>
-      <div class="r">
-        <div class="qp">
-          <input class="input" data-dprice type="number" inputmode="numeric" min="0" placeholder="₹ price" value="${it.price > 0 ? it.price : ''}" aria-label="Price">
-          <input class="input q" data-dqty type="number" inputmode="numeric" min="0" value="${it.qty}" aria-label="Qty">
-          <button class="btn small primary" data-dsave="${esc(it.id)}">Save</button>
+        <div class="dgrid">
+          <input class="input" data-f="name" value="${v('name')}" placeholder="Car name" aria-label="Car name">
+          <input class="input" data-f="brand" value="${v('brand')}" list="dlBrands" placeholder="Brand" aria-label="Brand">
+          <input class="input" data-f="make" value="${v('make')}" list="dlMakes" placeholder="Car maker" aria-label="Car maker">
+          <input class="input" data-f="price" value="${v('price')}" type="number" inputmode="numeric" min="0" placeholder="₹ price" aria-label="Price">
+          <input class="input" data-f="qty" value="${v('qty')}" type="number" inputmode="numeric" min="0" aria-label="Qty">
         </div>
-        <span>${S.data.hasAiKey && it.photos.length ? `<button class="link" data-reid="${esc(it.id)}">✨ Identify</button> · ` : ''}<button class="link" data-edit="${esc(it.id)}">Full edit</button></span>
+        <div class="dmeta">
+          <span>${esc([it.id, it.series, it.year, it.color].filter(Boolean).join(' · '))}</span>
+          ${it.tags.length ? `<span class="tg">${badgeHtml(it.tags)}</span>` : ''}
+          ${it.review ? `<span class="review">${esc(it.review)}</span>` : ''}
+          <span class="links">${S.data.hasAiKey && it.photos.length ? `<button class="link" data-reid="${esc(it.id)}">✨ Identify</button>` : ''}<button class="link" data-edit="${esc(it.id)}">Full edit</button></span>
+        </div>
       </div>
     </div>`;
   }
-
-  async function saveDraft(row) {
-    const id = row.dataset.did;
-    const name = row.querySelector('[data-dname]').value.trim();
-    const price = row.querySelector('[data-dprice]').value;
-    const qty = row.querySelector('[data-dqty]').value;
-    if (!name) { toast('Add the car name', true); row.querySelector('[data-dname]').focus(); return; }
-    if (!(Number(price) > 0)) { toast('Add a price', true); row.querySelector('[data-dprice]').focus(); return; }
-    const b = row.querySelector('[data-dsave]');
-    b.disabled = true; b.textContent = '…';
-    try {
-      const r = await api('saveItem', { item: { id, name, price, qty, review: '' } });
-      const it = r.item;
-      it.brand = G.normBrand(it.brand); it.tags = it.tags.map(G.normTag);
-      S.data.items[S.data.items.findIndex(x => x.id === id)] = it;
-      S.byId[id] = it;
-      toast(`${id} is live · ${money(it.price)}`);
-      renderTab();
-      const next = $('#stockList [data-dprice]');
-      if (next) next.focus();
-    } catch (e) { handleErr(e); b.disabled = false; b.textContent = 'Save'; }
+  function renderDraftBar() {
+    const n = Object.keys(S.dirty).length;
+    $('#draftBar').hidden = !n;
+    $('#draftBarText').textContent = `${n} car${n > 1 ? 's' : ''} changed`;
+    $('#draftSaveAll').textContent = `Save all (${n})`;
   }
+  async function saveMany(items, btn) {
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      const r = await api('saveMany', { items });
+      let live = 0;
+      r.results.forEach(x => { const it = mergeItem(x.item, x.oldId); delete S.dirty[x.oldId || it.id]; if (!isDraft(it)) live++; });
+      toast(`Saved ${r.results.length} car${r.results.length > 1 ? 's' : ''}${live ? ` · ${live} now live` : ''}${r.errors.length ? ` · ${r.errors.length} not found` : ''}`, !!r.errors.length);
+      fillLists();
+      renderTab();
+      return r;
+    } catch (e) { handleErr(e); } finally { if (btn) { btn.disabled = false; btn.textContent = label; } }
+  }
+  $('#draftSaveAll').addEventListener('click', () => {
+    const items = Object.entries(S.dirty).map(([id, d]) => {
+      const it = Object.assign({ id }, d);
+      if (it.brand !== undefined) it.brand = G.normBrand(it.brand);
+      const name = d.name !== undefined ? d.name : (S.byId[id] || {}).name;
+      const price = d.price !== undefined ? d.price : (S.byId[id] || {}).price;
+      if (name && Number(price) > 0) it.review = ''; // you've checked it — clear the AI note
+      return it;
+    });
+    saveMany(items, $('#draftSaveAll'));
+  });
+  $('#draftDiscard').addEventListener('click', () => { S.dirty = {}; renderDraftBar(); renderStock(); });
+  window.addEventListener('beforeunload', e => { if (Object.keys(S.dirty).length) { e.preventDefault(); e.returnValue = ''; } });
+
+  // ── paste details (from Claude, a spreadsheet, anywhere) ──
+  const PCOLS = ['id', 'name', 'brand', 'make', 'series', 'year', 'color', 'condition', 'tags', 'price', 'qty'];
+  function parsePaste(text) {
+    const t = text.trim();
+    if (!t) return [];
+    if (t[0] === '[') { try { return JSON.parse(t).filter(x => x && x.id); } catch (e) { /* fall through */ } }
+    return t.split(/\r?\n/).map(line => {
+      const cells = (line.includes('\t') ? line.split('\t') : line.split('|')).map(c => c.trim());
+      if (!cells[0] || /^id$/i.test(cells[0]) || /^-+$/.test(cells[0])) return null;
+      const it = {};
+      PCOLS.forEach((k, i) => { if (cells[i]) it[k] = cells[i]; });
+      if (it.brand) it.brand = G.normBrand(it.brand);
+      if (it.tags) it.tags = it.tags.split(/\s*[,;]\s*/).map(G.normTag);
+      if (it.price) it.price = it.price.replace(/[^0-9.]/g, '');
+      if (it.name && Number(it.price) > 0) it.review = '';
+      return it.id ? it : null;
+    }).filter(Boolean);
+  }
+  const pasteDlg = $('#pasteDlg');
+  $('#pasteBtn').addEventListener('click', () => { $('#pastePreview').textContent = ''; pasteDlg.showModal(); $('#pasteText').focus(); });
+  pasteDlg.addEventListener('click', e => { if (e.target === pasteDlg || e.target.closest('[data-close]')) pasteDlg.close(); });
+  $('#pasteText').addEventListener('input', () => {
+    const items = parsePaste($('#pasteText').value);
+    const unknown = items.filter(it => !S.byId[it.id] && !S.data.items.some(x => x.id.toLowerCase() === String(it.id).toLowerCase()));
+    $('#pastePreview').textContent = items.length ? `${items.length} car${items.length > 1 ? 's' : ''} found${unknown.length ? ` · not in stock: ${unknown.map(x => x.id).join(', ')}` : ''}` : '';
+  });
+  $('#pasteForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const items = parsePaste($('#pasteText').value);
+    if (!items.length) { toast('Nothing to update — check the format', true); return; }
+    const r = await saveMany(items, $('#pasteApply'));
+    if (r) { $('#pasteText').value = ''; pasteDlg.close(); }
+  });
+
+  // ── photo zoom (read the card while you type) ──
+  const zoomDlg = $('#zoomDlg');
+  zoomDlg.addEventListener('click', () => zoomDlg.close());
+
   $('#stockQ').addEventListener('input', renderStock);
   $('#stockF').addEventListener('change', renderStock);
   $('#stockSummary').addEventListener('click', e => {
     if (e.target.closest('[data-showdrafts]')) { $('#stockF').value = 'drafts'; renderStock(); }
   });
+  $('#stockList').addEventListener('input', e => {
+    const f = e.target.dataset.f;
+    const row = e.target.closest('.srow.draft');
+    if (!f || !row) return;
+    const id = row.dataset.did;
+    (S.dirty[id] = S.dirty[id] || {})[f] = e.target.value;
+    row.classList.add('dirty');
+    renderDraftBar();
+  });
   $('#stockList').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.closest('.srow.draft')) { e.preventDefault(); saveDraft(e.target.closest('.srow.draft')); }
+    // Enter jumps to the same field on the next car — fast column-by-column entry
+    if (e.key !== 'Enter' || !e.target.dataset.f) return;
+    e.preventDefault();
+    const rows = [...document.querySelectorAll('#stockList .srow.draft')];
+    const i = rows.indexOf(e.target.closest('.srow.draft'));
+    const next = rows[i + 1] && rows[i + 1].querySelector(`[data-f="${e.target.dataset.f}"]`);
+    if (next) next.focus(); else $('#draftSaveAll').focus();
   });
   $('#stockList').addEventListener('click', e => {
-    const ds = e.target.closest('[data-dsave]');
-    if (ds) return saveDraft(ds.closest('.srow.draft'));
+    const z = e.target.closest('[data-zoom]');
+    if (z) { $('#zoomImg').src = G.img(z.dataset.ref, 1400) || z.src; zoomDlg.showModal(); return; }
     const ri = e.target.closest('[data-reid]');
     if (ri) {
       ri.textContent = '✨ Reading…'; ri.disabled = true;

@@ -149,6 +149,7 @@ const ADMIN_ACTIONS = {
   setEnquiry: setEnquiry_,
   bulkAdd: bulkAdd_,
   reidentify: reidentify_,
+  saveMany: saveMany_,
   identify: b => {
     const r = identifyCar_((b.photos || []).filter(p => p && p.data));
     if (!r.ok) throw new Error(r.note);
@@ -309,16 +310,7 @@ function saveItem_(body) {
     if (it.id && !r) throw new Error('Item not found: ' + it.id);
     id = r ? str_(get_(t, r, 'ID')) : makeId_(it.brand, maxIdNum_(t) + 1);
 
-    const upd = {};
-    Object.keys(FIELD_TO_COL).forEach(f => {
-      if (it[f] === undefined) return;
-      let v = it[f];
-      if (f === 'tags') v = (Array.isArray(v) ? v : list_(v)).join(', ');
-      else if (NUMERIC_FIELDS.indexOf(f) >= 0) v = num_(v) == null ? '' : num_(v);
-      else if (f === 'hidden') v = !!v;
-      else v = str_(v);
-      upd[FIELD_TO_COL[f]] = v;
-    });
+    const upd = itemToCols_(it);
 
     const kept = Array.isArray(body.photos) ? body.photos.map(str_).filter(Boolean) : (r ? photosOf_(t, r) : []);
     const photos = newIds.concat(kept);
@@ -352,6 +344,54 @@ function saveItem_(body) {
   bustCache_();
   const t2 = readTable_(CFG.INV);
   return { item: itemFromRow_(t2, findRow_(t2, 'ID', id)), notes: notes };
+}
+
+/** item fields → Inventory columns (only the fields that are present) */
+function itemToCols_(it) {
+  const upd = {};
+  Object.keys(FIELD_TO_COL).forEach(f => {
+    if (it[f] === undefined || it[f] === null) return;
+    let v = it[f];
+    if (f === 'tags') v = (Array.isArray(v) ? v : list_(v)).join(', ');
+    else if (NUMERIC_FIELDS.indexOf(f) >= 0) v = num_(v) == null ? '' : num_(v);
+    else if (f === 'hidden') v = truthy_(v);
+    else v = str_(v);
+    upd[FIELD_TO_COL[f]] = v;
+  });
+  return upd;
+}
+
+/**
+ * Update many cars in ONE request (fast draft editing / pasted details).
+ * body.items: [{id, name?, brand?, make?, series?, year?, color?, condition?, tags?, price?, qty?, …}]
+ * Blank/missing fields are left as they are. DC- IDs get their brand prefix once the brand is known.
+ */
+function saveMany_(body) {
+  const list = (Array.isArray(body.items) ? body.items : []).slice(0, 500);
+  const results = [];
+  const errors = [];
+  withLock_(() => {
+    const t = readTable_(CFG.INV);
+    const st = readTable_(CFG.SALES);
+    list.forEach(it => {
+      const r = it && findRow_(t, 'ID', it.id);
+      if (!r) { errors.push((it && it.id) + ': not found'); return; }
+      writeObj_(t, r.row, itemToCols_(it));
+      const cur = itemFromRow_(t, r);
+      const res = { item: cur };
+      if (/^DC-/i.test(cur.id) && ID_PREFIX[cur.brand.toLowerCase()]) {
+        const newId = makeId_(cur.brand, Number(cur.id.replace(/\D/g, '')));
+        if (!findRow_(t, 'ID', newId) && !findRow_(st, 'Item ID', cur.id)) {
+          writeObj_(t, r.row, { 'ID': newId });
+          res.oldId = cur.id;
+          res.item = itemFromRow_(t, r);
+        }
+      }
+      results.push(res);
+    });
+  });
+  bustCache_();
+  return { results: results, errors: errors };
 }
 
 function findPhotos_(body) {
