@@ -13,7 +13,7 @@ A store for selling your Hot Wheels / Mini GT / Kaido House / Inno64 / Pop Race 
 
 | Piece | What it does |
 |---|---|
-| `site/index.html` | The store. Search (by car maker, name, series, tag; understands *lambo, chevy, vw, JDM, STH*), filters with live counts (brand, type, car maker, condition, price, in-stock), sort (newest, rarest, price, name, brand), product page with photo gallery, cart → **Order on WhatsApp**. |
+| `site/index.html` | The store. Search (by car maker, name, series, tag; understands *lambo, chevy, vw, JDM, STH*), filters with live counts (brand, type, car maker, condition, price, in-stock), sort (newest, rarest, price, name, brand), product page with photo gallery, cart → **order request** (buyer leaves name + phone/Instagram; you contact them). |
 | `site/admin.html` | Your phone-friendly back office: add cars one by one or **bulk-upload a whole folder of photos** (AI reads each card), price drafts, record sales, convert website enquiries, stats. |
 | `backend/Code.gs` | The API. Lives inside your Google Sheet. |
 
@@ -22,22 +22,19 @@ A store for selling your Hot Wheels / Mini GT / Kaido House / Inno64 / Pop Race 
 ## Setup (≈10 minutes)
 
 ### 1. Backend (Google Sheet + Apps Script)
-1. Create a new Google Sheet with a **personal Gmail account** (Workspace accounts often block public photo links). Name it *SB's Garage*.
-2. **Extensions → Apps Script.** Delete what's in `Code.gs`, paste the whole of `backend/Code.gs`, hit **Save**.
-3. *(Optional)* **Project Settings ⚙ → Time zone → (GMT+05:30) India Standard Time.**
-4. In the toolbar pick the function **`setup`** → **Run**. Google asks for permission → *Review permissions → your account → Advanced → Go to SB's Garage (unsafe) → Allow*. (It's "unsafe" only because it's your own unverified script.)
-5. Back in the sheet you'll see the tabs **Inventory, Sales, Enquiries, Settings, Dashboard** and a pop-up with your **admin key**. Copy it. (Lost it? Sheet menu **🏁 SB's Garage → Show admin key**.)
-6. **Deploy → New deployment → ⚙ Select type → Web app**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-   - **Deploy** → copy the **Web app URL** (ends in `/exec`).
+1. Open your Google Sheet (personal Gmail account) → **Extensions → Apps Script**.
+2. Delete everything in `Code.gs`, paste the whole of `backend/Code.gs`, hit **Save**.
+3. **Deploy → New deployment** (or *Manage deployments → ✏️ Edit → Version: New version* if you already have one)
+   - Type: **Web app** · Execute as: **Me** · Who has access: **Anyone**
+   - **Deploy** → allow the permissions (*Advanced → Go to project → Allow*) → copy the **Web app URL** (ends in `/exec`).
+4. That's it. The first visit to your store **sets the sheet up by itself**: it creates the Inventory, Sales, Enquiries, Settings, Dashboard and **Admin** tabs. Your admin-panel key is in the **Admin** tab. Keep that tab private.
 
 ### 2. Site
 1. Open `site/config.js` and paste the URL:
    ```js
    window.G64_CONFIG = { API_URL: 'https://script.google.com/macros/s/XXXX/exec' };
    ```
-2. In the sheet's **Settings** tab set your **WhatsApp Number** (with country code, e.g. `919876543210`), store name, tagline, Instagram, announcement bar, shipping note.
+2. In the sheet's **Settings** tab set your store name, tagline, Instagram (optional), announcement bar and shipping note.
 3. Host the `site` folder (pick one):
    - **Netlify Drop** (fastest): go to app.netlify.com/drop, drag the `site` folder in. Done. Add a custom domain later.
    - **GitHub Pages** (already set up for this repo): Settings → Pages → Branch `main`, folder `/ (root)`. Store: `https://bhatts-creator.github.io/sb-garage-diecast/`, admin: `…/site/admin.html`.
@@ -64,7 +61,7 @@ The **Review** column tells you what the AI was unsure about ("medium confidence
 
 **Change tags / price / qty** → just edit the Inventory sheet. The store picks it up on next load (menu **🏁 → Push sheet changes to the store now** if you're impatient). Tick **Hide** to pull a car without deleting it.
 
-**Someone orders on the site** → their WhatsApp message arrives with a **Ref (ENQ-0007)** and the exact cars. The same enquiry sits in admin → *Enquiries*. Agree price/shipping on chat → **Convert to sale**.
+**Someone orders on the site** → they fill name + phone/Instagram (+ city, note) in the cart and get a **Ref (ENQ-0007)**. It lands in the *Enquiries* tab and admin → *Enquiries* with their contact. Call or DM them, agree price and shipping → **Convert to sale**.
 
 **Sold on Instagram / a meet / anywhere** → admin → *Stock* → **Sell** (or *Sales → + Record sale* for multi-car orders). Fill buyer, channel, payment and a **Revenue tag**. Stock drops automatically, a row lands in *Sales* with profit. Typo? **Undo sale** puts the stock back.
 
@@ -99,7 +96,7 @@ The **Review** column tells you what the AI was unsure about ("medium confidence
 ## AI identify — free (optional, recommended for bulk)
 
 **Free option: Google Gemini.** No credits or billing.
-1. Go to **aistudio.google.com** → *Get API key* → *Create API key* (same Google account is fine; don't add billing).
+1. Go to **aistudio.google.com** → sign in with your Google account → accept the terms → **Get API key** (left menu) → **Create API key** → pick or create a project → copy the key (starts with `AIza…`). Don't add billing.
 2. Apps Script → **Project Settings ⚙ → Script properties → Add**: `GEMINI_API_KEY` = that key.
 3. Reload the admin panel. The ✨ options appear in *Bulk upload*, as **✨ Fill details from photo** on the one-car form, and as **✨ Identify** on each draft.
 
@@ -130,7 +127,7 @@ Without any key, a draft takes its name from the file name if it isn't a camera 
 - **Deep link per car** — `your-site/?item=HW-0012` opens that car directly. The *Share* button on each car does this.
 - **Announcement bar** (Settings tab) for drop timings / offers.
 - **NEW** ribbon for cars added in the last 7 days (Settings → New Badge Days), **–% off** badge from Compare At, **SOLD** stamps as social proof, "Last one" urgency.
-- **Ref IDs** on every WhatsApp order → you know which chats came from the site.
+- **Ref IDs** on every order request → you know which buyers came from the site.
 
 ---
 
@@ -139,7 +136,7 @@ Without any key, a draft takes its name from the file name if it isn't a camera 
 - **Changed `Code.gs`?** Deploy → **Manage deployments → ✏️ → Version: New version → Deploy**. Same URL, nothing to change on the site.
 - **Changed the site?** Re-drag the folder to Netlify / push to GitHub.
 - **Something off in the sheet tabs?** 🏁 SB's Garage → **Setup / repair sheets** (safe to re-run; it never deletes data). Also run it after pasting a newer `Code.gs`, to add new columns (e.g. *Review*) and the yellow draft highlight.
-- **Locked out of admin** after 15 wrong keys → wait 10 minutes.
+- **Locked out of admin** after 15 wrong keys → wait 10 minutes. **Not sure what's broken?** Open `your-site/site/check.html`: it tests each step and tells you the fix.
 
 **Limits** (Google's free quotas, plenty for a personal store): ~20k web fetches/day, ~30 simultaneous requests. The catalog is cached for speed, so traffic spikes from an Instagram post are fine.
 

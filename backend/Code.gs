@@ -5,8 +5,9 @@
  *  Your Google Sheet IS the database:
  *    Inventory  – one row per car. Edit tags / price / qty right here.
  *    Sales      – every sale: buyer, price, channel, revenue tag, profit.
- *    Enquiries  – carts sent from the website (WhatsApp orders).
- *    Settings   – store name, WhatsApp number, announcement bar…
+ *    Enquiries  – order requests sent from the website cart (name + phone/Instagram).
+ *    Settings   – store name, Instagram, announcement bar…
+ *    Admin      – your admin-panel key (keep this tab private).
  *    Dashboard  – auto-calculated revenue breakdowns.
  *
  *  Setup (full steps in README.md):
@@ -45,14 +46,13 @@ HEADERS[CFG.INV] = ['ID', 'Thumb', 'Name', 'Brand', 'Manufacturer', 'Series', 'Y
   'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review'];
 HEADERS[CFG.SALES] = ['Order ID', 'Date', 'Item ID', 'Item Name', 'Brand', 'Qty', 'Unit Price', 'Total',
   'Unit Cost', 'Profit', 'Buyer', 'Contact', 'City', 'Channel', 'Payment', 'Revenue Tag', 'Enquiry ID', 'Notes'];
-HEADERS[CFG.ENQ] = ['Enquiry ID', 'Date', 'Name', 'City', 'Items', 'Item IDs', 'Total', 'Status', 'Notes'];
+HEADERS[CFG.ENQ] = ['Enquiry ID', 'Date', 'Name', 'Contact', 'City', 'Buyer Note', 'Items', 'Item IDs', 'Total', 'Status', 'Notes'];
 
 const FORMULA_COLS = ['Thumb']; // never written by the script
 
 const DEFAULT_SETTINGS = [
   ['Store Name', "SB's Garage"],
   ['Tagline', '1:64 grails, straight off my shelf.'],
-  ['WhatsApp Number', '919999999999'],
   ['Instagram', 'sbsgarage'],
   ['Announcement', 'New drop every Sunday 8 PM · Shipping across India'],
   ['Shipping Note', 'Shipping ₹80 flat, free above ₹1,500. Bubble-wrapped & boxed.'],
@@ -71,7 +71,7 @@ const NUMERIC_FIELDS = ['price', 'compareAt', 'qty', 'cost'];
 const BRANDS = ['Hot Wheels', 'Mini GT', 'Kaido House', 'Inno64', 'Pop Race', 'Matchbox', 'Tarmac Works',
   'Tomica', 'Majorette', 'Greenlight', 'M2 Machines', 'Other'];
 const CONDITIONS = ['Mint (carded)', 'Carded – soft corners', 'Carded – damaged card', 'Boxed', 'Loose', 'Custom'];
-const CHANNELS = ['Website', 'WhatsApp', 'Instagram', 'Facebook group', 'Meetup / in person', 'Other'];
+const CHANNELS = ['Website', 'Instagram', 'Facebook group', 'Meetup / in person', 'Phone', 'Other'];
 const PAYMENTS = ['UPI', 'Cash', 'Bank transfer', 'Card', 'Other'];
 const ENQ_STATUSES = ['New', 'Converted', 'Lost'];
 
@@ -83,9 +83,19 @@ const ID_PREFIX = {
 
 /* ═════════════════════════════  HTTP API  ═════════════════════════════ */
 
+/** First request after deploying sets the sheet up by itself — no need to run setup() by hand. */
+function ensureSetup_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('setup_ok')) return;
+  const missing = () => [CFG.INV, CFG.SALES, CFG.ENQ, CFG.SETTINGS].some(n => !ss_().getSheetByName(n)) || !prop_('ADMIN_KEY');
+  if (missing()) withLock_(() => { if (missing()) setup(); });
+  cache.put('setup_ok', '1', 21600);
+}
+
 function doGet(e) {
   const p = (e && e.parameter) || {};
   try {
+    ensureSetup_();
     if (p.action === 'ping') return json_(diagnose_());
     let s = p.fresh ? null : cacheGet_(CFG.CACHE_KEY);
     if (!s) {
@@ -152,6 +162,7 @@ function doPost(e) {
     return json_({ ok: false, error: 'Bad JSON' });
   }
   try {
+    ensureSetup_();
     if (body.action === 'enquiry') return json_(publicEnquiry_(body));
     if (!checkKey_(body.key)) return json_({ ok: false, code: 401, error: 'Wrong admin key' });
     const fn = ADMIN_ACTIONS[body.action];
@@ -257,6 +268,8 @@ function adminData_() {
     id: str_(get_(et, r, 'Enquiry ID')),
     date: ts_(get_(et, r, 'Date')),
     name: str_(get_(et, r, 'Name')),
+    contact: str_(get_(et, r, 'Contact')),
+    buyerNote: str_(get_(et, r, 'Buyer Note')),
     city: str_(get_(et, r, 'City')),
     items: str_(get_(et, r, 'Items')),
     itemIds: str_(get_(et, r, 'Item IDs')),
@@ -514,7 +527,7 @@ function reidentify_(body) {
 /** "Datsun_510 Kaido.jpg" → "Datsun 510 Kaido"; camera names (IMG_1234, PXL_…) → "" */
 function nameFromFile_(f) {
   const base = str_(f).replace(/\.[a-z0-9]{2,5}$/i, '');
-  if (!base || /^(img|dsc|dcim|pxl|mvimg|photo|image|screenshot|whatsapp|signal|wa\d|cam|snapchat|\d)/i.test(base)) return '';
+  if (!base || /^(img|dsc|dcim|pxl|mvimg|photo|image|screenshot|whatsapp|signal|wa\d|cam|snapchat|\d)/i.test(base)) return ''; // camera / chat-app names
   return base.replace(/[_]+/g, ' ').replace(/\s+-\s+|\s{2,}/g, ' ').trim();
 }
 
@@ -698,15 +711,17 @@ function identifyCarClaude_(photos) {
 
 /* ═════════════════════════════  PUBLIC ENQUIRY  ═════════════════════════════ */
 
-/** Called by the store's "Order on WhatsApp" button. Prices are re-read server-side. */
+/** Called by the store's "Send order request" button. Prices are re-read server-side. */
 function publicEnquiry_(body) {
   const cache = CacheService.getScriptCache();
   const hits = Number(cache.get('enq_rate') || 0);
-  if (hits > 80) throw new Error('Busy — please message us directly on WhatsApp');
+  if (hits > 80) throw new Error('Too many orders right now — please try again in a few minutes.');
   cache.put('enq_rate', String(hits + 1), 600);
 
   const req = (Array.isArray(body.items) ? body.items : []).slice(0, 40);
   if (!req.length) throw new Error('Empty cart');
+  if (!clean_(body.name, 60)) throw new Error('Please add your name');
+  if (clean_(body.contact, 80).replace(/[^0-9a-z]/gi, '').length < 4) throw new Error('Please add your phone number or Instagram handle');
   let id;
   let total = 0;
   withLock_(() => {
@@ -727,7 +742,8 @@ function publicEnquiry_(body) {
     const t = readTable_(CFG.ENQ);
     id = 'ENQ-' + pad_(maxIdNum_(t, 'Enquiry ID') + 1, 4);
     appendObj_(t, {
-      'Enquiry ID': id, 'Date': new Date(), 'Name': clean_(body.name, 60), 'City': clean_(body.city, 60),
+      'Enquiry ID': id, 'Date': new Date(), 'Name': clean_(body.name, 60), 'Contact': clean_(body.contact, 80),
+      'City': clean_(body.city, 60), 'Buyer Note': clean_(body.note, 300),
       'Items': desc.join('\n'), 'Item IDs': ids.join(', '), 'Total': total, 'Status': 'New',
     });
   });
@@ -1003,6 +1019,17 @@ function setup() {
   buildDashboard_();
 
   if (!props.getProperty('ADMIN_KEY')) props.setProperty('ADMIN_KEY', randomKey_(20));
+  const adm = ss.getSheetByName('Admin') || ss.insertSheet('Admin');
+  adm.getRange(1, 1, 4, 2).setValues([
+    ['Admin key', props.getProperty('ADMIN_KEY')],
+    ['Admin panel', 'Open your-site/site/admin.html and paste the key above'],
+    ['Keep private', 'Anyone with this key can change your store. Do not share this sheet.'],
+    ['New key?', 'Delete ADMIN_KEY in Apps Script → Project Settings → Script properties, then reload the store.'],
+  ]);
+  adm.setColumnWidth(1, 140);
+  adm.setColumnWidth(2, 520);
+  adm.getRange(1, 1, 4, 1).setFontWeight('bold');
+  try { CacheService.getScriptCache().remove('setup_ok'); } catch (e) { /* ignore */ }
   photoFolder_();
   bustCache_();
 

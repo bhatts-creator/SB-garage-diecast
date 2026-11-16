@@ -337,7 +337,7 @@
           <span class="price">${money(it.price)}${off ? `<s>${money(it.compareAt)}</s>` : ''}</span>
           ${off ? `<span class="save">You save ${money(it.compareAt - it.price)}</span>` : ''}
         </div>
-        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out — ask on WhatsApp, I may find another.' : it.qty === 1 ? 'Last one on the shelf' : it.qty + ' in stock'}${inCart ? ` · ${inCart} in your cart` : ''}</div>
+        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : it.qty === 1 ? 'Last one on the shelf' : it.qty + ' in stock'}${inCart ? ` · ${inCart} in your cart` : ''}</div>
         ${sold ? '' : `<div class="buy-row">
           <div class="stepper" aria-label="Quantity">
             <button data-pq="-1" aria-label="Less" ${pdpQty <= 1 ? 'disabled' : ''}>−</button><span>${pdpQty}</span><button data-pq="1" aria-label="More" ${pdpQty >= room ? 'disabled' : ''}>+</button>
@@ -345,9 +345,9 @@
           <button class="btn primary" data-pdp-add ${room <= 0 ? 'disabled' : ''}>${room <= 0 ? 'All in your cart' : 'Add to cart'}</button>
         </div>`}
         <div class="pdp-actions">
-          <button class="btn" data-ask>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z"/></svg>
-            ${sold ? 'Ask for this' : 'Ask on WhatsApp'}</button>
+          ${igHandle() ? `<button class="btn" data-ask>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>
+            ${sold ? 'Ask for this' : 'Ask on Instagram'}</button>` : ''}
           <button class="btn" data-share>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
             Share</button>
@@ -416,23 +416,16 @@
     try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch (e) { prompt('Copy this link', url); }
   }
 
-  /* ═══════════ WhatsApp ═══════════ */
-  function waNumber() {
-    let n = String(state.settings.whatsappNumber || '').replace(/\D/g, '');
-    if (n.length === 10) n = '91' + n;
-    return n;
+  /* ═══════════ Instagram (optional) ═══════════ */
+  function igHandle() {
+    const ig = String(state.settings.instagram || '').trim();
+    const m = ig.match(/instagram\.com\/([\w.]+)/i);
+    return (m ? m[1] : ig.replace(/^@/, '')).replace(/[^\w.]/g, '');
   }
-  const isTouch = () => matchMedia('(pointer: coarse)').matches;
-  function openWa(text, preOpened) {
-    const url = 'https://wa.me/' + waNumber() + '?text=' + encodeURIComponent(text);
-    if (preOpened && !preOpened.closed) { preOpened.location.href = url; return; }
-    if (isTouch()) location.href = url; else window.open(url, '_blank', 'noopener');
-  }
-  function askOne(it) {
-    const msg = it.qty > 0
-      ? `Hi! Is this still available?\n\n${it.name} (${it.brand}) [${it.id}] — ${money(it.price)}\n${itemUrl(it)}`
-      : `Hi! Looking for this one — any chance you can get it?\n\n${it.name} (${it.brand}) [${it.id}]\n${itemUrl(it)}`;
-    openWa(msg);
+  async function askOne(it) {
+    // Instagram DMs can't be pre-filled, so copy the car's link for the buyer to paste
+    try { await navigator.clipboard.writeText(`${it.name} [${it.id}] ${itemUrl(it)}`); toast('Car link copied — paste it in the DM'); } catch (e) { /* ignore */ }
+    window.open('https://ig.me/m/' + igHandle(), '_blank', 'noopener');
   }
 
   /* ═══════════ cart ═══════════ */
@@ -491,6 +484,7 @@
   }
 
   function openCart() {
+    $('#cartDone').hidden = true; $('#cartItems').hidden = false;
     renderCart();
     $('#cart').classList.add('open'); $('#cart').setAttribute('aria-hidden', 'false');
     $('#scrim').hidden = false; document.body.style.overflow = 'hidden';
@@ -504,28 +498,34 @@
   async function checkout() {
     const lines = cartLines().filter(l => l.it && l.it.qty > 0).map(l => ({ id: l.id, qty: Math.min(l.qty, l.it.qty), it: l.it }));
     if (!lines.length) return;
-    if (!waNumber()) { toast('WhatsApp number not set up yet', true); return; }
     const name = $('#buyerName').value.trim();
+    const contact = $('#buyerContact').value.trim();
     const city = $('#buyerCity').value.trim();
-    ls.set('g64_buyer', { name, city });
+    const note = $('#buyerNote').value.trim();
+    if (!name) { toast('Please add your name', true); $('#buyerName').focus(); return; }
+    if (contact.replace(/[^0-9a-z]/gi, '').length < 4) { toast('Add your phone number or Instagram handle', true); $('#buyerContact').focus(); return; }
+    ls.set('g64_buyer', { name, contact, city });
     const btn = $('#checkout');
     btn.disabled = true;
-    const label = btn.innerHTML;
-    btn.lastChild.textContent = ' Opening WhatsApp…';
-    const pre = !isTouch() ? window.open('', '_blank') : null; // keep popup-blockers happy on desktop
-    let ref = '';
+    btn.textContent = 'Sending…';
     try {
-      const r = await G.timeout(G.post('enquiry', { name, city, items: lines.map(l => ({ id: l.id, qty: l.qty })) }), 6000);
-      ref = r.enquiryId || '';
-    } catch (e) { /* still send the WhatsApp message */ }
-    const total = lines.reduce((s, l) => s + l.it.price * l.qty, 0);
-    const body = lines.map((l, i) => `${i + 1}. ${l.it.name} (${l.it.brand}) [${l.it.id}]\n    ${l.qty} × ${money(l.it.price)}`).join('\n');
-    const msg = `Hi! I'd like to buy these from ${state.settings.storeName || 'your store'}:\n\n${body}\n\nSubtotal: ${money(total)}` +
-      (ref ? `\nRef: ${ref}` : '') + (name || city ? `\n\n${[name, city].filter(Boolean).join(' · ')}` : '');
-    openWa(msg, pre);
-    btn.disabled = false;
-    btn.innerHTML = label;
-    toast(ref ? 'Order sent · Ref ' + ref : 'Opening WhatsApp…');
+      const r = await G.timeout(G.post('enquiry', { name, contact, city, note, items: lines.map(l => ({ id: l.id, qty: l.qty })) }), 20000);
+      const total = lines.reduce((s, l) => s + l.it.price * l.qty, 0);
+      $('#cartDone').innerHTML = `<div class="done-ic">✓</div><h3>Order request sent</h3>
+        <p>Ref <b>${esc(r.enquiryId || '')}</b> · ${lines.length} car${lines.length > 1 ? 's' : ''} · ${money(total)}</p>
+        <p class="muted">I'll reach out on <b>${esc(contact)}</b> to confirm availability, shipping and payment. Nothing is charged yet.</p>
+        <button class="btn block" data-done-close>Keep browsing</button>`;
+      state.cart = {};
+      saveCart();
+      refreshCardButtons();
+      $('#cartItems').hidden = true; $('#cartFoot').hidden = true; $('#cartDone').hidden = false;
+      $('#buyerNote').value = '';
+    } catch (e) {
+      toast(e.message === 'timeout' ? 'That took too long — please try again' : e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send order request';
+    }
   }
 
   /* ═══════════ misc UI ═══════════ */
@@ -547,7 +547,6 @@
     $('#shipNote').textContent = s.shippingNote || '';
     const ig = String(s.instagram || '').trim();
     if (ig) { $('#igLink').hidden = false; $('#igLink').href = /^https?:/.test(ig) ? ig : 'https://instagram.com/' + ig.replace(/^@/, ''); }
-    if (waNumber()) { $('#waLink').hidden = false; $('#waLink').href = 'https://wa.me/' + waNumber(); }
   }
 
   function renderStats() {
@@ -603,7 +602,7 @@
   /* ═══════════ events ═══════════ */
   readURL();
   const saved = ls.get('g64_buyer');
-  if (saved) { $('#buyerName').value = saved.name || ''; $('#buyerCity').value = saved.city || ''; }
+  if (saved) { $('#buyerName').value = saved.name || ''; $('#buyerContact').value = saved.contact || ''; $('#buyerCity').value = saved.city || ''; }
 
   let qT;
   $('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { state.f.q = e.target.value.trim(); apply(); }, 140); });
@@ -679,6 +678,7 @@
     if (rm) setQty(rm.dataset.cartRm, 0);
   });
   $('#checkout').addEventListener('click', checkout);
+  $('#cartDone').addEventListener('click', e => { if (e.target.closest('[data-done-close]')) closePanels(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanels(); });
 
   new IntersectionObserver(es => { if (es[0].isIntersecting) renderMore(); }, { rootMargin: '600px' }).observe($('#sentinel'));

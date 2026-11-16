@@ -66,9 +66,7 @@
       add('ok', 'Sheet tabs + admin key are set up');
       // 5. settings
       const s = d.settings || {};
-      const wa = String(s.whatsappNumber || '').replace(/\D/g, '');
-      if (!wa || wa === '919999999999') add('warn', 'WhatsApp number not set', 'Orders would go to the placeholder number.', 'Sheet → <b>Settings</b> tab → <b>WhatsApp Number</b>, e.g. <code>919876543210</code>.');
-      else add('ok', 'WhatsApp orders go to +' + esc(wa));
+      add('ok', 'Store name: ' + esc(s.storeName || '—'), s.instagram ? 'Instagram: @' + esc(String(s.instagram).replace(/^@/, '')) : 'No Instagram set (optional, Settings tab).');
       // 6. catalog
       try {
         const c = await G.getCatalog(true);
@@ -83,7 +81,7 @@
       const key = $('#key').value.trim();
       if (key) {
         try { await G.post('login', { key }); add('ok', 'Admin key works'); }
-        catch (e) { add('bad', 'Admin key rejected', esc(e.message), 'Sheet menu <b>🏁 SB\'s Garage → Show admin key</b>, or Apps Script → Project Settings → Script properties → <code>ADMIN_KEY</code>.'); }
+        catch (e) { add('bad', 'Admin key rejected', esc(e.message), 'Your sheet’s <b>Admin</b> tab has the key. Or Apps Script → Project Settings → Script properties → <code>ADMIN_KEY</code>.'); }
       }
     }
     $('#run').addEventListener('click', run);

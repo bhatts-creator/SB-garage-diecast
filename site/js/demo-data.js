@@ -61,7 +61,6 @@
     settings: {
       storeName: "SB's Garage",
       tagline: '1:64 grails, straight off my shelf.',
-      whatsappNumber: '919999999999',
       instagram: 'sbsgarage',
       announcement: 'DEMO MODE · add your Apps Script URL in config.js to go live',
       shippingNote: 'Shipping ₹80 flat, free above ₹1,500. Bubble-wrapped & boxed.',

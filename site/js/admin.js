@@ -542,6 +542,7 @@
     const last = ls.get('g64_last_sale') || {};
     S.sale = { lines: (pre.lines || []).map(l => Object.assign({}, l)), enquiryId: pre.enquiryId || '' };
     sf.buyer.value = pre.buyer || '';
+    sf.contact.value = pre.contact || '';
     sf.city.value = pre.city || '';
     sf.date.value = today();
     sf.channel.value = pre.channel || last.channel || S.data.lists.channels[0];
@@ -683,6 +684,7 @@
       return `<div class="order enq">
         <div class="order-top"><span class="who">${esc(e.name || 'No name')}${e.city ? ` <span class="muted">· ${esc(e.city)}</span>` : ''}</span><span class="amt">${money(e.total)}</span></div>
         <div class="meta">${esc(e.id)} · ${new Date(e.date).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} <span class="pill ${pill}">${esc(e.status)}</span>${gone.length ? ` <span class="pill bad">stock gone: ${esc(gone.join(', '))}</span>` : ''}</div>
+        ${e.contact ? `<div class="meta">📞 <b>${esc(e.contact)}</b>${e.buyerNote ? ` · “${esc(e.buyerNote)}”` : ''}</div>` : ''}
         <div class="items">${esc(e.items)}</div>
         <div class="acts">
           ${e.status === 'New' ? `<button class="btn small ghost" data-lost="${esc(e.id)}">Mark lost</button><button class="btn small primary" data-convert="${esc(e.id)}">Convert to sale</button>`
@@ -697,7 +699,7 @@
     if (cv) {
       const q = S.data.enquiries.find(x => x.id === cv.dataset.convert);
       const lines = parseIds(q.itemIds).filter(l => S.byId[l.id]).map(l => ({ id: l.id, qty: l.qty, price: S.byId[l.id].price || 0 }));
-      return openSale({ lines, buyer: q.name, city: q.city, channel: 'Website', enquiryId: q.id });
+      return openSale({ lines, buyer: q.name, contact: q.contact, city: q.city, channel: 'Website', enquiryId: q.id });
     }
     const b = e.target.closest('[data-lost],[data-reopen]');
     if (!b) return;
