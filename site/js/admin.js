@@ -342,7 +342,8 @@
 
   function setGroupState(uid, state, text, sub) { B.st[uid] = { state, text, sub }; renderBulk(); }
 
-  const mergeItem = it => {
+  const mergeItem = (it, oldId) => {
+    if (oldId && oldId !== it.id) { S.data.items = S.data.items.filter(x => x.id !== oldId); delete S.byId[oldId]; }
     it.brand = G.normBrand(it.brand); it.tags = it.tags.map(G.normTag);
     const idx = S.data.items.findIndex(x => x.id === it.id);
     if (idx >= 0) S.data.items[idx] = it; else S.data.items.push(it);
@@ -371,8 +372,8 @@
     if (opts.ai) {
       setGroupState(uid, 'busy', 'Saved ✓ Reading card…');
       try {
-        const r = await G.timeout(api('reidentify', { id: it.id }), 75000);
-        it = mergeItem(r.item);
+        const r = await G.timeout(api('reidentify', { id: it.id }), 100000);
+        it = mergeItem(r.item, r.oldId);
         const conf = (it.review.match(/(high|medium|low) confidence/) || [])[1];
         setGroupState(uid, 'done', it.name || 'Untitled — add a name', subLine(it, r.ok_ai ? 'AI ' + (conf || 'done') : 'AI: ' + (r.notes || [''])[0].slice(0, 40)));
         return;
@@ -562,8 +563,7 @@
     if (ri) {
       ri.textContent = '✨ Reading…'; ri.disabled = true;
       api('reidentify', { id: ri.dataset.reid }).then(r => {
-        const it = r.item; it.brand = G.normBrand(it.brand); it.tags = it.tags.map(G.normTag);
-        S.data.items[S.data.items.findIndex(x => x.id === it.id)] = it; S.byId[it.id] = it;
+        const it = mergeItem(r.item, r.oldId);
         toast(r.ok_ai ? 'Filled ' + (it.name || it.id) : (r.notes || ['AI could not read it'])[0], !r.ok_ai);
         renderTab();
       }).catch(handleErr);

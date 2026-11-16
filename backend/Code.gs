@@ -84,12 +84,14 @@ const ID_PREFIX = {
 /* ═════════════════════════════  HTTP API  ═════════════════════════════ */
 
 /** First request after deploying sets the sheet up by itself — no need to run setup() by hand. */
+const SETUP_VERSION = 4;
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('setup_ok')) return;
-  const missing = () => [CFG.INV, CFG.SALES, CFG.ENQ, CFG.SETTINGS].some(n => !ss_().getSheetByName(n)) || !prop_('ADMIN_KEY');
+  if (cache.get('setup_ok_' + SETUP_VERSION)) return; // versioned: new code re-checks the sheet at once
+  const missing = () => [CFG.INV, CFG.SALES, CFG.ENQ, CFG.SETTINGS].some(n => !ss_().getSheetByName(n)) || !prop_('ADMIN_KEY') ||
+    prop_('SETUP_VERSION') !== String(SETUP_VERSION);
   if (missing()) withLock_(() => { if (missing()) setup(); });
-  cache.put('setup_ok', '1', 21600);
+  cache.put('setup_ok_' + SETUP_VERSION, '1', 21600);
 }
 
 function doGet(e) {
@@ -110,7 +112,7 @@ function doGet(e) {
 
 /** What /exec?action=ping reports — used by site/check.html. */
 function diagnose_() {
-  const out = { ok: true, at: new Date().toISOString(), version: 3 };
+  const out = { ok: true, at: new Date().toISOString(), version: SETUP_VERSION };
   try {
     const ss = ss_();
     out.sheetName = ss.getName();
@@ -330,7 +332,7 @@ function saveItem_(body) {
       upd['Added On'] = new Date();
       if (upd['Qty'] === undefined || upd['Qty'] === '') upd['Qty'] = 1;
       if (upd['Hide'] === undefined) upd['Hide'] = false;
-      appendObj_(t, upd);
+      setThumb_(t, appendObj_(t, upd));
     }
   });
 
@@ -521,6 +523,21 @@ function reidentify_(body) {
   const res = saveItem_({ item: upd, draft: true });
   res.ok_ai = ai.ok;
   if (!ai.ok) res.notes = [ai.note];
+  const brand = upd.brand || cur.brand;
+  if (/^DC-/i.test(cur.id) && brand && ID_PREFIX[str_(brand).toLowerCase()]) {
+    const newId = makeId_(brand, Number(cur.id.replace(/\D/g, '')));
+    withLock_(() => {
+      const t = readTable_(CFG.INV);
+      const st = readTable_(CFG.SALES);
+      const r = findRow_(t, 'ID', cur.id);
+      if (r && !findRow_(t, 'ID', newId) && !findRow_(st, 'Item ID', cur.id)) {
+        writeObj_(t, r.row, { 'ID': newId });
+        res.oldId = cur.id;
+        res.item = itemFromRow_(t, r);
+      }
+    });
+    bustCache_();
+  }
   return res;
 }
 
@@ -628,34 +645,41 @@ function identifyCarGemini_(photos) {
   });
   parts.push({ text: AI_PROMPT + '\n\nReply with one JSON object with exactly these keys: ' + AI_SCHEMA.required.join(', ') +
     '. condition must be one of: ' + CONDITIONS.join(' | ') + ' (or empty).' });
+  // Free models get overloaded (503) or rate-limited (429). Each model has its own free quota,
+  // so when the main one is busy we try the lighter one before giving up.
+  const models = [model, 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'].filter((m, i, a) => a.indexOf(m) === i);
   let useSchema = true;
   let noThinking = true; // reading a label doesn't need the model's slow "thinking" step
-  let res;
+  let res = null;
   let j = {};
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const gen = { responseMimeType: 'application/json', temperature: 0.2 };
-    if (useSchema) gen.responseSchema = GEMINI_SCHEMA;
-    if (noThinking) gen.thinkingConfig = { thinkingBudget: 0 };
-    res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-      method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: gen }), muteHttpExceptions: true,
-    });
-    try { j = JSON.parse(res.getContentText() || '{}'); } catch (e) { j = {}; }
-    const code = res.getResponseCode();
-    const msg = (j.error && j.error.message) || '';
-    if (code === 400 && noThinking && /thinking/i.test(msg)) { noThinking = false; attempt--; continue; } // model can't turn thinking off
-    if (code === 400 && useSchema && /schema/i.test(msg)) { useSchema = false; attempt--; continue; } // model rejects the schema → plain JSON mode
-    if (code === 429) {
-      if (/per ?day|daily|PerDay/i.test(msg)) return { ok: false, note: 'Gemini free daily limit reached — tap ✨ Identify on the draft tomorrow, or fill it in yourself.' };
-      if (attempt < 2) Utilities.sleep(6000 * (attempt + 1)); // free tier allows only a few requests a minute
-      continue;
+  let lastNote = '';
+  for (let mi = 0; mi < models.length; mi++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const gen = { responseMimeType: 'application/json', temperature: 0.2 };
+      if (useSchema) gen.responseSchema = GEMINI_SCHEMA;
+      if (noThinking) gen.thinkingConfig = { thinkingBudget: 0 };
+      res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(models[mi]) + ':generateContent', {
+        method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key },
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: gen }), muteHttpExceptions: true,
+      });
+      try { j = JSON.parse(res.getContentText() || '{}'); } catch (e) { j = {}; }
+      const code = res.getResponseCode();
+      const msg = (j.error && j.error.message) || '';
+      if (code === 400 && noThinking && /thinking/i.test(msg)) { noThinking = false; attempt--; continue; } // model can't turn thinking off
+      if (code === 400 && useSchema && /schema/i.test(msg)) { useSchema = false; attempt--; continue; } // model rejects the schema → plain JSON mode
+      if (code < 300) break;
+      if (code === 429) lastNote = /per ?day|daily|PerDay/i.test(msg) ? 'Gemini free daily limit reached' : 'Gemini free limit is busy';
+      else if (code >= 500) lastNote = 'Gemini is overloaded right now';
+      else lastNote = 'Gemini error ' + code + (msg ? ': ' + msg.slice(0, 140) : '');
+      if (code === 404 || (code === 429 && /daily|PerDay/i.test(msg))) break; // no point retrying this model
+      if (code >= 500 || code === 429) { if (attempt === 0) Utilities.sleep(code === 429 ? 6000 : 3000); continue; }
+      break;
     }
-    if ([500, 502, 503].indexOf(code) >= 0) { if (attempt < 2) Utilities.sleep(2000); continue; }
-    break;
+    if (res && res.getResponseCode() < 300) break;
   }
-  const code = res.getResponseCode();
-  if (code === 429) return { ok: false, note: 'Gemini free limit is busy — tap ✨ Identify on the draft in a minute.' };
-  if (code >= 300) return { ok: false, note: 'Gemini error ' + code + (j.error && j.error.message ? ': ' + j.error.message.slice(0, 160) : '') };
+  if (!res || res.getResponseCode() >= 300) {
+    return { ok: false, note: (lastNote || 'Gemini failed') + ' — tap ✨ Identify on this draft later, or fill it in yourself.' };
+  }
   const cand = (j.candidates || [])[0];
   if (!cand || !cand.content) return { ok: false, note: 'Gemini could not read this photo' + (j.promptFeedback && j.promptFeedback.blockReason ? ' (' + j.promptFeedback.blockReason + ')' : '') };
   const text = (cand.content.parts || []).map(x => x.text || '').join('').replace(/^```(json)?\s*|\s*```$/g, '');
@@ -971,6 +995,7 @@ function fillMissingIds_(startRow, numRows, needBrand) {
     if (get_(t, r, 'Added On') === '') upd['Added On'] = new Date();
     if (get_(t, r, 'Qty') === '') upd['Qty'] = 1;
     writeObj_(t, r.row, upd);
+    setThumb_(t, r.row);
     changed++;
   });
   return changed;
@@ -1032,7 +1057,8 @@ function setup() {
   adm.setColumnWidth(1, 140);
   adm.setColumnWidth(2, 520);
   adm.getRange(1, 1, 4, 1).setFontWeight('bold');
-  try { CacheService.getScriptCache().remove('setup_ok'); } catch (e) { /* ignore */ }
+  props.setProperty('SETUP_VERSION', String(SETUP_VERSION));
+  try { CacheService.getScriptCache().remove('setup_ok_' + SETUP_VERSION); } catch (e) { /* ignore */ }
   photoFolder_();
   bustCache_();
 
@@ -1049,16 +1075,22 @@ function styleHeader_(sh) {
   sh.setFrozenRows(1);
 }
 
+/** Thumbnail of the cover photo in the sheet, one formula per row. */
+function setThumb_(t, rowNum) {
+  if (t.idx['Thumb'] == null || t.idx['Photo'] == null) return;
+  const p = colLetter_(t.idx['Photo']) + rowNum;
+  t.sh.getRange(rowNum, t.idx['Thumb'] + 1).setFormula('=IF(' + p + '="","",IFERROR(IMAGE(IF(LEFT(' + p + ',4)="http",' + p +
+    ',"https://drive.google.com/thumbnail?sz=w200&id="&' + p + ')),""))');
+}
+
 function formatInventory_(sh) {
   const t = readTable_(CFG.INV);
   const max = sh.getMaxRows();
   const col = h => t.idx[h] + 1;
   const L = h => colLetter_(t.idx[h]);
   if (t.idx['Thumb'] != null && t.idx['Photo'] != null) {
-    const p = L('Photo');
-    sh.getRange(1, col('Thumb')).setFormula(
-      '={"Thumb";ARRAYFORMULA(IF(' + p + '2:' + p + '="",,IMAGE(IF(LEFT(' + p + '2:' + p + ',4)="http",' + p + '2:' + p +
-      ',"' + CFG.IMG_URL + '"&' + p + '2:' + p + '&"=w200"))))}');
+    sh.getRange(1, col('Thumb')).setValue('Thumb'); // replaces the old ARRAYFORMULA header (showed #REF!)
+    t.rows.forEach(r => { if (str_(get_(t, r, 'ID'))) setThumb_(t, r.row); });
     sh.setColumnWidth(col('Thumb'), 70);
   }
   ['ID', 'Name', 'Year', 'Tags', 'Photo', 'Web Photos'].forEach(h => {
