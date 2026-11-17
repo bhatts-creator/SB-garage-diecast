@@ -14,7 +14,7 @@
   const state = {
     items: [], byId: {}, settings: {}, list: [], toks: [], shown: PAGE, booted: false,
     f: { q: '', brand: new Set(), tag: new Set(), make: new Set(), cond: new Set(), min: null, max: null, stock: false },
-    sort: 'new',
+    sort: 'picks',
     cart: ls.get(CART_KEY) || {},
     openFacets: new Set(), makeQ: '', pdpPushed: false, pdpId: null,
     closedFacets: new Set(ls.get('g64_closed_facets') || []),
@@ -77,6 +77,7 @@
   }
 
   const SORTS = {
+    picks: (a, b) => b.rank - a.rank || b.price - a.price || (b.added || 0) - (a.added || 0),
     new: (a, b) => (b.added || 0) - (a.added || 0) || b.n - a.n,
     rarity: (a, b) => b.rank - a.rank || b.price - a.price,
     priceAsc: (a, b) => a.price - b.price,
@@ -87,14 +88,14 @@
 
   function apply(opts) {
     state.toks = tokens(state.f.q);
-    const s = SORTS[state.sort] || SORTS.new;
+    const s = SORTS[state.sort] || SORTS.picks;
     state.list = state.items.filter(it => passes(it)).sort((a, b) => (a.qty > 0 ? 0 : 1) - (b.qty > 0 ? 0 : 1) || s(a, b));
     state.shown = PAGE;
     renderGrid();
     renderFacets();
     renderQuick();
     renderActive();
-    $('#resultCount').textContent = state.list.length === 1 ? '1 car' : state.list.length + ' cars';
+    $('#resultCount').textContent = state.list.length === 1 ? '1 model on the shelf' : state.list.length + ' models on the shelf';
     if (!opts || !opts.keepUrl) syncURL();
   }
 
@@ -109,7 +110,7 @@
 
   function addLabel(it) {
     if (it.qty <= 0) return 'Sold out';
-    return state.cart[it.id] ? 'In cart ✓' : 'Add to cart';
+    return state.cart[it.id] ? 'In bag ✓' : 'Add to bag';
   }
 
   const priceText = it => (it.price > 0 ? money(it.price) : 'Ask for price');
@@ -117,7 +118,14 @@
   // brands that only make premium models: never "Mainline"
   const PREMIUM_BRANDS = ['Mini GT', 'Kaido House', 'Inno64', 'Pop Race', 'Tarmac Works', 'Greenlight', 'M2 Machines'];
 
-  function card(it) {
+  function topTag(it) {
+    const t = it.tags.slice().sort((a, b) => ((G.tagDef(b) || {}).rank || 0) - ((G.tagDef(a) || {}).rank || 0))[0];
+    if (!t) return '';
+    const d = G.tagDef(t);
+    return `<span class="card-tag${d && d.rank >= 70 ? ' hot' : ''}" title="${esc(d ? d.label : t)}">${esc(d ? d.label : t)}</span>`;
+  }
+
+  function card(it, i) {
     const sold = it.qty <= 0;
     const off = it.price > 0 && it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
     const sub = [it.series, it.year].filter(Boolean).join(' · ');
@@ -125,14 +133,17 @@
     const pics = (it.photos.length ? it.photos : ['']).slice(0, 6);
     return `<article class="card${sold ? ' is-sold' : ''}" data-id="${esc(it.id)}">
       <div class="card-media" data-open="${esc(it.id)}" role="button" tabindex="0" aria-label="View ${esc(it.name)}">
-        <div class="cm-track">${pics.map((p, i) => G.imgTag(p, 600, i ? '' : it.name, 'loading="lazy" decoding="async" draggable="false"')).join('')}</div>
-        <span class="badges">${badges(it, 3)}</span>
-        ${off && !sold ? `<span class="discount">-${off}%</span>` : ''}
-        ${sold ? '<span class="sold-stamp">SOLD</span>' : ''}
-        ${pics.length > 1 ? `
-          <button class="cm-nav cm-prev" data-cm="-1" aria-label="Previous photo">‹</button>
-          <button class="cm-nav cm-next" data-cm="1" aria-label="Next photo">›</button>
-          <span class="cm-dots">${pics.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</span>` : ''}
+        <span class="card-no">${String(i + 1).padStart(2, '0')}</span>
+        ${topTag(it)}
+        <div class="cm-frame">
+          <div class="cm-track">${pics.map((p, k) => G.imgTag(p, 600, k ? '' : it.name, 'loading="lazy" decoding="async" draggable="false"')).join('')}</div>
+          ${off && !sold ? `<span class="discount">-${off}%</span>` : ''}
+          ${sold ? '<span class="sold-stamp">SOLD</span>' : ''}
+          ${pics.length > 1 ? `
+            <button class="cm-nav cm-prev" data-cm="-1" aria-label="Previous photo">‹</button>
+            <button class="cm-nav cm-next" data-cm="1" aria-label="Next photo">›</button>
+            <span class="cm-dots">${pics.map((_, k) => `<i class="${k ? '' : 'on'}"></i>`).join('')}</span>` : ''}
+        </div>
       </div>
       <div class="card-body">
         <div class="card-meta">${esc(meta)}</div>
@@ -149,14 +160,15 @@
 
   function renderGrid() {
     const grid = $('#grid');
-    grid.innerHTML = state.list.slice(0, state.shown).map(card).join('');
+    grid.innerHTML = state.list.slice(0, state.shown).map((it, i) => card(it, i)).join('');
     $('#empty').hidden = state.list.length > 0;
   }
   function renderMore() {
     if (state.shown >= state.list.length) return;
-    const next = state.list.slice(state.shown, state.shown + PAGE);
+    const start = state.shown;
+    const next = state.list.slice(start, start + PAGE);
     state.shown += PAGE;
-    $('#grid').insertAdjacentHTML('beforeend', next.map(card).join(''));
+    $('#grid').insertAdjacentHTML('beforeend', next.map((it, i) => card(it, start + i)).join(''));
   }
   function refreshCardButtons() {
     document.querySelectorAll('[data-add]').forEach(b => {
@@ -229,19 +241,22 @@
     fcEl.textContent = n;
   }
 
+  // fixed shelf tabs; each one is a preset of the brand / tag filters
+  const TABS = [
+    { id: 'all', label: 'All models', tag: [], brand: [] },
+    { id: 'premium', label: 'Premium', tag: ['Premium'], brand: [] },
+    { id: 'mainline', label: 'Mainline', tag: ['Mainline'], brand: [] },
+    { id: 'rare', label: 'Rare finds', tag: ['STH', 'TH', 'RLC', 'Chase', 'Rare'], brand: [] },
+    { id: 'tt', label: 'Team Transport', tag: ['Team Transport'], brand: [] },
+    { id: 'minigt', label: 'Mini GT', tag: [], brand: ['Mini GT'] },
+  ];
+  const sameSet = (set, arr) => set.size === arr.length && arr.every(v => set.has(v));
+  const tabOn = t => sameSet(state.f.tag, t.tag) && sameSet(state.f.brand, t.brand);
+  const tabHas = t => t.id === 'all' || state.items.some(it => (!t.tag.length || it.tags.some(x => t.tag.includes(x))) && (!t.brand.length || t.brand.includes(it.brand)));
+
   function renderQuick() {
-    const tagCounts = counts(FACETS[1]).filter(e => e[1] > 0 || state.f.tag.has(e[0]));
-    const brandCounts = counts(FACETS[0]).filter(e => e[1] > 0 || state.f.brand.has(e[0]));
-    const none = !state.f.tag.size && !state.f.brand.size;
-    let html = `<button class="chip" data-quick="all" aria-pressed="${none}">All</button>`;
-    html += tagCounts.map(([v]) => {
-      const d = G.tagDef(v);
-      return `<button class="chip${v === 'STH' ? ' sth' : ''}" data-quick="tag" data-v="${esc(v)}" aria-pressed="${state.f.tag.has(v)}">${esc(d ? (d.key === 'Silver Series' ? d.label : d.short) : v)}</button>`;
-    }).join('');
-    if (brandCounts.length > 1) {
-      html += brandCounts.map(([v]) => `<button class="chip" data-quick="brand" data-v="${esc(v)}" aria-pressed="${state.f.brand.has(v)}">${esc(v)}</button>`).join('');
-    }
-    $('#quick').innerHTML = html;
+    $('#quick').innerHTML = TABS.filter(t => tabHas(t) || tabOn(t))
+      .map(t => `<button class="tab" data-tab="${t.id}" aria-pressed="${tabOn(t)}">${esc(t.label)}</button>`).join('');
   }
 
   function renderActive() {
@@ -281,7 +296,7 @@
     if (f.min != null) p.set('min', f.min);
     if (f.max != null) p.set('max', f.max);
     if (f.stock) p.set('stock', '1');
-    if (state.sort !== 'new') p.set('sort', state.sort);
+    if (state.sort !== 'picks') p.set('sort', state.sort);
     if (extra && extra.item) p.set('item', extra.item);
     const s = p.toString();
     return location.pathname + (s ? '?' + s : '');
@@ -299,7 +314,7 @@
     f.min = p.get('min') ? Number(p.get('min')) : null;
     f.max = p.get('max') ? Number(p.get('max')) : null;
     f.stock = p.get('stock') === '1';
-    state.sort = SORTS[p.get('sort')] ? p.get('sort') : 'new';
+    state.sort = SORTS[p.get('sort')] ? p.get('sort') : 'picks';
     $('#q').value = f.q;
     $('#pmin').value = f.min ?? '';
     $('#pmax').value = f.max ?? '';
@@ -351,12 +366,12 @@
           <span class="price">${priceText(it)}${off ? `<s>${money(it.compareAt)}</s>` : ''}</span>
           ${off ? `<span class="save">You save ${money(it.compareAt - it.price)}</span>` : ''}
         </div>
-        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : 'Qty ' + it.qty + ' in stock'}${inCart ? ` · ${inCart} in your cart` : ''}</div>
+        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : 'Qty ' + it.qty + ' in stock'}${inCart ? ` · ${inCart} in your bag` : ''}</div>
         ${sold ? '' : `<div class="buy-row">
           <div class="stepper" aria-label="Quantity">
             <button data-pq="-1" aria-label="Less" ${pdpQty <= 1 ? 'disabled' : ''}>−</button><span>${pdpQty}</span><button data-pq="1" aria-label="More" ${pdpQty >= room ? 'disabled' : ''}>+</button>
           </div>
-          <button class="btn primary" data-pdp-add ${room <= 0 ? 'disabled' : ''}>${room <= 0 ? 'All in your cart' : 'Add to cart'}</button>
+          <button class="btn primary" data-pdp-add ${room <= 0 ? 'disabled' : ''}>${room <= 0 ? 'All in your bag' : 'Add to bag'}</button>
         </div>`}
         <div class="pdp-actions">
           ${igHandle() ? `<button class="btn" data-ask>
@@ -412,7 +427,7 @@
   }
   dlg.addEventListener('close', () => {
     state.pdpId = null;
-    document.title = (state.settings.storeName || "SB's Garage") + ' · Diecast Store';
+    document.title = (state.settings.storeName || "SB's Garage") + ' · Diecast Collection';
     if (state.pdpPushed) { state.pdpPushed = false; history.back(); } else syncURL();
   });
   window.addEventListener('popstate', () => {
@@ -453,7 +468,7 @@
     state.cart[id] = next;
     saveCart();
     refreshCardButtons();
-    toast('Added to cart');
+    toast('Added to bag');
     const b = $('#cartCount'); b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump');
   }
   function setQty(id, q) {
@@ -467,14 +482,14 @@
   function renderCartBadge() {
     const n = cartLines().reduce((s, l) => s + (l.it && l.it.qty > 0 ? l.qty : 0), 0);
     const b = $('#cartCount');
-    b.hidden = !n; b.textContent = n;
+    b.textContent = n;
   }
   function renderCart() {
     const lines = cartLines();
     const live = lines.filter(l => l.it && l.it.qty > 0);
     $('#cartFoot').hidden = !live.length;
     if (!lines.length) {
-      $('#cartItems').innerHTML = '<div class="cart-empty"><strong>Your cart is empty</strong>Find something shiny and hit “Add to cart”.</div>';
+      $('#cartItems').innerHTML = '<div class="cart-empty"><strong>Your bag is empty</strong>Find something shiny and hit “Add to bag”.</div>';
       return;
     }
     $('#cartItems').innerHTML = lines.map(l => {
@@ -554,9 +569,7 @@
   function applySettings(s) {
     const name = s.storeName || "SB's Garage";
     $('#storeName').textContent = name;
-    $('#footName').textContent = name;
-    if (!state.pdpId) document.title = name + ' · Diecast Store';
-    if (s.tagline) $('#tagline').textContent = s.tagline;
+    if (!state.pdpId) document.title = name + ' · Diecast Collection';
     const ann = $('#announce');
     ann.hidden = !s.announcement; ann.textContent = s.announcement || '';
     $('#shipNote').textContent = s.shippingNote || '';
@@ -565,12 +578,7 @@
   }
 
   function renderStats() {
-    const live = state.items.filter(i => i.qty > 0);
-    const cars = live.reduce((s, i) => s + i.qty, 0);
-    const grails = live.filter(i => i.tags.some(t => ['STH', 'RLC', 'TH', 'Chase'].includes(t))).length;
-    const brands = new Set(live.map(i => i.brand)).size;
-    $('#heroStats').innerHTML = `<b>${cars}</b> cars on the shelf` +
-      (grails ? ` · <b class="gold">${grails}</b> TH / STH / chase` : '') + (brands > 1 ? ` · <b>${brands}</b> brands` : '');
+    $('#shelfCount').textContent = state.items.length;
   }
 
   function skeleton() {
@@ -659,11 +667,11 @@
   });
 
   $('#quick').addEventListener('click', e => {
-    const c = e.target.closest('[data-quick]');
+    const c = e.target.closest('[data-tab]');
     if (!c) return;
-    const k = c.dataset.quick;
-    if (k === 'all') { state.f.tag.clear(); state.f.brand.clear(); }
-    else { const s = state.f[k]; s.has(c.dataset.v) ? s.delete(c.dataset.v) : s.add(c.dataset.v); }
+    const t = TABS.find(x => x.id === c.dataset.tab);
+    state.f.tag = new Set(t.tag);
+    state.f.brand = new Set(t.brand);
     apply();
   });
 
@@ -717,7 +725,7 @@
   $('#toggleSide').addEventListener('click', () => { ls.set('g64_hide_filters', !ls.get('g64_hide_filters')); applySideHidden(); });
   $('#openFilters').addEventListener('click', () => { $('#filters').classList.add('open'); $('#scrim').hidden = false; document.body.style.overflow = 'hidden'; });
   $('#closeFilters').addEventListener('click', closePanels);
-  $('#showResults').addEventListener('click', () => { closePanels(); window.scrollTo({ top: $('.toolbar').offsetTop - 70, behavior: 'smooth' }); });
+  $('#showResults').addEventListener('click', () => { closePanels(); window.scrollTo({ top: $('#collection').offsetTop - 90, behavior: 'smooth' }); });
   $('#cartItems').addEventListener('click', e => {
     const q = e.target.closest('[data-cart-q]');
     if (q) return setQty(q.dataset.cartQ, (state.cart[q.dataset.cartQ] || 0) + Number(q.dataset.d));

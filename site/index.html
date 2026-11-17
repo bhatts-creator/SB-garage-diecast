@@ -3,130 +3,163 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SB's Garage · Diecast Store</title>
-  <meta name="description" content="Hot Wheels, Mini GT, Kaido House, Inno64, Pop Race & more. Treasure Hunts, Super Treasure Hunts, premiums.">
-  <meta name="theme-color" content="#0b0c0f">
-  <meta property="og:title" content="SB's Garage · Diecast Store">
-  <meta property="og:description" content="TH, STH, premiums & mainlines — straight from a collector's shelf.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ff5a1f'/%3E%3Ctext x='32' y='42' font-family='Arial Black,Arial' font-weight='900' font-style='italic' font-size='24' text-anchor='middle' fill='%23120700'%3ESB%3C/text%3E%3C/svg%3E">
+  <title>SB's Garage · Diecast Collection</title>
+  <meta name="description" content="A few finds from a personal 1:64 collection. Hot Wheels, Mini GT and more: premiums, mainlines and rare finds.">
+  <meta name="theme-color" content="#232a36">
+  <meta property="og:title" content="SB's Garage · One car is never enough.">
+  <meta property="og:description" content="A few finds from my personal collection. Your next shelf favourite might be here.">
+  <meta property="og:image" content="img/logo.png">
+  <link rel="icon" href="img/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..800&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/store.css">
 </head>
 <body>
+  <!-- top strip -->
+  <div class="strip">
+    <span>Personal collection. Shared obsession.</span>
+    <span class="strip-r">Diecast &amp; scale models</span>
+  </div>
   <div class="announce" id="announce" hidden></div>
 
+  <!-- header -->
   <header class="top">
     <div class="top-inner">
-      <a class="logo" href="./" aria-label="Home">
-        <span class="logo-mark">SB</span>
-        <span class="logo-text" id="storeName">SB's Garage</span>
-      </a>
-      <label class="search">
-        <span class="sr">Search cars</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Search Porsche, Skyline, STH, JDM…" autocomplete="off" enterkeyhint="search">
-      </label>
-      <button class="icon-btn cart-btn" id="cartBtn" aria-label="Open cart">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
-        <span class="cart-count" id="cartCount" hidden>0</span>
-      </button>
+      <a class="logo" href="./" aria-label="SB's Garage home"><img src="img/logo.png" alt="SB garage 1:64" width="1000" height="196"></a>
+      <span class="sr" id="storeName">SB's Garage</span>
+      <nav class="nav" aria-label="Main">
+        <a href="#collection" class="current">Collection</a>
+        <a href="#about">About me</a>
+        <span class="nav-sep" aria-hidden="true"></span>
+        <button class="bag" id="cartBtn" aria-label="Open bag">Bag <span class="cart-count" id="cartCount">0</span></button>
+      </nav>
     </div>
   </header>
 
-  <section class="hero" id="hero">
-    <h1 id="tagline">1:64 grails, straight off my shelf.</h1>
-    <p class="hero-stats" id="heroStats">&nbsp;</p>
-  </section>
-
-  <nav class="quick" id="quick" aria-label="Quick filters"></nav>
-
-  <div class="layout">
-    <aside class="filters" id="filters" aria-label="Filters">
-      <div class="filters-head">
-        <h2>Filters</h2>
-        <button class="link" id="clearAll">Clear all</button>
-        <button class="icon-btn close-filters" id="closeFilters" aria-label="Close filters">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </div>
-      <div class="filters-body">
-        <label class="switch"><input type="checkbox" id="inStock"><span class="track"></span> In stock only</label>
-        <div class="facet" id="facet-brand"></div>
-        <div class="facet" id="facet-tag"></div>
-        <div class="facet" id="facet-make"></div>
-        <div class="facet" id="facet-cond"></div>
-        <div class="facet">
-          <h3>Price</h3>
-          <div class="price-row">
-            <input class="input" id="pmin" type="number" inputmode="numeric" min="0" placeholder="Min ₹">
-            <span class="muted">to</span>
-            <input class="input" id="pmax" type="number" inputmode="numeric" min="0" placeholder="Max ₹">
-          </div>
+  <main>
+    <!-- hero -->
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <h1 id="tagline">One car is <span class="red">never enough.<svg class="scribble" viewBox="0 0 300 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 10 C 70 4, 150 3, 298 6"/></svg></span></h1>
+          <p>A few finds from my personal collection. Have a look around—your next shelf favourite might be here.</p>
+        </div>
+        <div class="stamp" aria-label="Models on the shelf">
+          <span class="stamp-k">The shelf</span>
+          <span class="stamp-n" id="shelfCount">–</span>
+          <span class="stamp-k">Models &amp; <br>counting</span>
         </div>
       </div>
-      <div class="filters-foot">
-        <button class="btn primary block" id="showResults">Show results</button>
-      </div>
-    </aside>
+    </section>
 
-    <main class="main">
-      <div class="toolbar">
-        <button class="btn small filter-toggle" id="openFilters">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-          Filters <span class="filter-count" id="filterCount" hidden></span>
-        </button>
-        <button class="btn small ghost side-toggle" id="toggleSide" aria-label="Show or hide filters">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-          <span class="when-shown">Hide filters</span><span class="when-hidden">Show filters</span>
-        </button>
-        <span class="result-count" id="resultCount"></span>
+    <!-- collection -->
+    <section class="collection" id="collection">
+      <div class="tools">
+        <label class="search">
+          <span class="sr">Search cars</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="q" type="search" placeholder="Looking for a particular car?" autocomplete="off" enterkeyhint="search">
+        </label>
         <label class="sort">
-          <span class="sr">Sort by</span>
-          <select class="select" id="sort">
+          <span>Sort by</span>
+          <select id="sort">
+            <option value="picks">Shelf picks</option>
             <option value="new">Newest first</option>
-            <option value="rarity">Rarest first</option>
-            <option value="priceAsc">Price: low → high</option>
-            <option value="priceDesc">Price: high → low</option>
+            <option value="priceAsc">Price: low to high</option>
+            <option value="priceDesc">Price: high to low</option>
             <option value="name">Name A–Z</option>
-            <option value="brand">Brand</option>
           </select>
         </label>
       </div>
+
+      <div class="tabs-row">
+        <nav class="tabs" id="quick" aria-label="Quick filters"></nav>
+        <button class="more-filters" id="openFilters">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          Filters <span class="filter-count" id="filterCount" hidden></span>
+        </button>
+        <span class="result-count" id="resultCount"></span>
+      </div>
+      <button id="toggleSide" hidden></button>
       <div class="active" id="active"></div>
+
       <div class="grid" id="grid" aria-live="polite"></div>
       <div class="empty" id="empty" hidden>
-        <p class="empty-title">No cars match that.</p>
-        <p class="muted">Try a different search or clear a filter. Looking for something specific? It might be on the shelf but not listed yet — ask on Instagram.</p>
+        <p class="empty-title">Nothing on the shelf matches that.</p>
+        <p class="muted">Try a different search or clear a filter. Looking for something specific? It might be on the shelf but not listed yet—ask on Instagram.</p>
         <button class="btn" id="emptyClear">Clear filters</button>
       </div>
       <div id="sentinel" aria-hidden="true"></div>
-    </main>
-  </div>
+    </section>
 
+    <!-- about -->
+    <section class="about" id="about">
+      <div class="about-inner">
+        <div class="about-l">
+          <p class="eyebrow">About me / The person behind the shelf</p>
+          <h2>The fun is<br>in <span class="red">the hunt.</span></h2>
+          <p class="hunt"><span>Blinkit</span> / <span>Stores nearby</span> / <span>Trips abroad</span></p>
+          <p class="stamp-line">Always room for one more.</p>
+        </div>
+        <div class="about-r">
+          <p>I’m obsessed with cars. Diecast cars are how that obsession has taken over my shelves. The collection has grown pretty big, but somehow there’s always another model I want to add.</p>
+          <p>The best bit is finding it. Checking Blinkit, looking through stores nearby, or keeping an eye out while travelling abroad. Spotting something you’ve been hunting for—or a car you didn’t know you needed—is half the fun.</p>
+          <p>SB Garage is where I share that collection and let a few finds make their way to someone else’s shelf. If one car has ever turned into “just one more” for you, you’ll feel at home here.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- footer -->
   <footer class="foot">
     <div class="foot-inner">
-      <div>
-        <strong id="footName">SB's Garage</strong>
-        <p class="muted" id="shipNote"></p>
-      </div>
-      <div class="foot-links">
-        <a id="igLink" href="#" target="_blank" rel="noopener" hidden>Instagram</a>
+      <strong id="footName">SB Garage / Keep hunting.</strong>
+      <span class="muted">Small cars. Plenty of stories.</span>
+      <a id="igLink" href="#" target="_blank" rel="noopener" hidden>Instagram</a>
+    </div>
+    <p class="ship-note" id="shipNote"></p>
+  </footer>
+
+  <!-- filters drawer -->
+  <aside class="filters" id="filters" aria-label="Filters">
+    <div class="filters-head">
+      <h2>Filters</h2>
+      <button class="link" id="clearAll">Clear all</button>
+      <button class="icon-btn close-filters" id="closeFilters" aria-label="Close filters">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="filters-body">
+      <label class="switch"><input type="checkbox" id="inStock"><span class="track"></span> In stock only</label>
+      <div class="facet" id="facet-brand"></div>
+      <div class="facet" id="facet-tag"></div>
+      <div class="facet" id="facet-make"></div>
+      <div class="facet" id="facet-cond"></div>
+      <div class="facet">
+        <h3>Price</h3>
+        <div class="price-row">
+          <input class="input" id="pmin" type="number" inputmode="numeric" min="0" placeholder="Min ₹">
+          <span class="muted">to</span>
+          <input class="input" id="pmax" type="number" inputmode="numeric" min="0" placeholder="Max ₹">
+        </div>
       </div>
     </div>
-  </footer>
+    <div class="filters-foot">
+      <button class="btn primary block" id="showResults">Show results</button>
+    </div>
+  </aside>
 
   <!-- product detail -->
   <dialog class="pdp" id="pdp" aria-label="Car details"><div class="pdp-inner" id="pdpInner"></div></dialog>
 
-  <!-- cart -->
+  <!-- bag -->
   <div class="scrim" id="scrim" hidden></div>
-  <aside class="drawer" id="cart" aria-label="Cart" aria-hidden="true">
+  <aside class="drawer" id="cart" aria-label="Bag" aria-hidden="true">
     <div class="drawer-head">
-      <h2>Your cart</h2>
-      <button class="icon-btn" id="closeCart" aria-label="Close cart">
+      <h2>Your bag</h2>
+      <button class="icon-btn" id="closeCart" aria-label="Close bag">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
