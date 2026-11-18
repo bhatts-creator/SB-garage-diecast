@@ -42,7 +42,28 @@
         isNew: !!raw.added && raw.added > cutoff, jdm: G.JDM.includes(make.toLowerCase()),
       });
     }).filter(it => showSold || it.qty > 0);
-    return { items, settings: s };
+    const sets = (cat.sets || []).map(x => makeSet(x, items)).filter(Boolean);
+    return { items: sets.concat(items), settings: s };
+  }
+
+  // a complete set becomes one listing; it's buyable only while every car in it is in stock
+  function makeSet(x, items) {
+    const ms = (x.members || []).map(m => Object.assign({}, m, { brand: G.normBrand(m.brand), qty: Number(m.qty) || 0, price: Number(m.price) || 0 }));
+    if (ms.length < 2) return null;
+    const qty = Math.min(...ms.map(m => m.qty));
+    if (qty <= 0) return null;
+    const one = k => (new Set(ms.map(m => m[k] || '')).size === 1 ? ms[0][k] : '');
+    const brand = one('brand') || 'Mixed';
+    const sum = ms.reduce((t, m) => t + m.price, 0);
+    const allPrem = ms.every(m => PREMIUM_BRANDS.includes(m.brand) || (m.tags || []).map(G.normTag).includes('Premium'));
+    const tags = ['Complete Set'].concat(allPrem ? ['Premium'] : []);
+    const hay = norm([x.name, brand, one('series'), 'set bundle package complete', ...ms.map(m => [m.name, m.make, m.modelNo].join(' '))].join(' '));
+    return {
+      id: x.id, isSet: true, name: x.name, brand, make: one('make'), series: one('series') || `Set of ${ms.length}`, year: one('year'),
+      tags, rank: 60, hay, hayC: hay.replace(/[^a-z0-9]/g, ''), condition: '', color: '', notes: x.notes || '',
+      price: Number(x.price) || 0, compareAt: sum > x.price ? sum : 0, qty, members: ms,
+      photos: ms.map(m => (m.photos || [])[0]).filter(Boolean), added: Date.now(), n: 0, isNew: false, jdm: false,
+    };
   }
 
   /* ═══════════ search ═══════════ */
@@ -122,16 +143,16 @@
     const t = it.tags.slice().sort((a, b) => ((G.tagDef(b) || {}).rank || 0) - ((G.tagDef(a) || {}).rank || 0))[0];
     if (!t) return '';
     const d = G.tagDef(t);
-    return `<span class="card-tag${d && d.rank >= 70 ? ' hot' : ''}" title="${esc(d ? d.label : t)}">${esc(d ? d.label : t)}</span>`;
+    return `<span class="card-tag${d && d.rank >= 60 ? ' hot' : ''}" title="${esc(d ? d.label : t)}">${esc(d ? d.label : t)}</span>`;
   }
 
   function card(it, i) {
     const sold = it.qty <= 0;
     const off = it.price > 0 && it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
-    const sub = [it.series, it.year].filter(Boolean).join(' · ');
-    const meta = [it.brand, it.make].filter(Boolean).join(' · ');
-    const pics = (it.photos.length ? it.photos : ['']).slice(0, 6);
-    return `<article class="card${sold ? ' is-sold' : ''}" data-id="${esc(it.id)}">
+    const sub = it.isSet ? `${it.members.length} cars${it.compareAt > it.price ? ' · save ' + money(it.compareAt - it.price) : ''}` : [it.series, it.year].filter(Boolean).join(' · ');
+    const meta = it.isSet ? [it.brand, 'Complete set'].join(' · ') : [it.brand, it.make].filter(Boolean).join(' · ');
+    const pics = (it.photos.length ? it.photos : ['']).slice(0, it.isSet ? 8 : 6);
+    return `<article class="card${it.isSet ? ' is-set' : ''}${sold ? ' is-sold' : ''}" data-id="${esc(it.id)}">
       <div class="card-media" data-open="${esc(it.id)}" role="button" tabindex="0" aria-label="View ${esc(it.name)}">
         <span class="card-no">${String(i + 1).padStart(2, '0')}</span>
         ${topTag(it)}
@@ -247,6 +268,7 @@
     { id: 'premium', label: 'Premium', tag: ['Premium'], brand: [] },
     { id: 'mainline', label: 'Mainline', tag: ['Mainline'], brand: [] },
     { id: 'rare', label: 'Rare finds', tag: ['STH', 'TH', 'RLC', 'Chase', 'Rare'], brand: [] },
+    { id: 'sets', label: 'Complete sets', tag: ['Complete Set'], brand: [] },
     { id: 'tt', label: 'Team Transport', tag: ['Team Transport'], brand: [] },
     { id: 'minigt', label: 'Mini GT', tag: [], brand: ['Mini GT'] },
   ];
@@ -345,8 +367,15 @@
     const room = Math.max(0, it.qty - inCart);
     pdpQty = Math.min(Math.max(1, pdpQty), Math.max(1, room));
     const photos = it.photos.length ? it.photos : [''];
-    const specs = [['Brand', it.brand], ['Car maker', it.make], ['Series', it.series], ['Year', it.year],
-      ['Colour', it.color], ['Condition', it.condition], ['Model no.', it.modelNo], ['Item code', it.id]].filter(s => s[1]);
+    const specs = it.isSet ? [['Brand', it.brand], ['Series', it.series], ['Cars', it.members.length], ['Bought separately', it.compareAt ? money(it.compareAt) : '']].filter(s => s[1])
+      : [['Brand', it.brand], ['Car maker', it.make], ['Series', it.series], ['Year', it.year],
+        ['Colour', it.color], ['Condition', it.condition], ['Model no.', it.modelNo], ['Item code', it.id]].filter(s => s[1]);
+    const inSet = !it.isSet && it.set ? state.items.find(x => x.isSet && x.members.some(m => m.id === it.id)) : null;
+    const members = it.isSet ? `<div class="set-list"><h3>In this set</h3>${it.members.map(m => {
+      const live = state.byId[m.id];
+      return `<${live ? `button data-goto="${esc(m.id)}"` : 'div'} class="set-row">${G.imgTag((m.photos || [])[0], 160, '')}<span><b>${esc(m.name)}</b><small>${esc([m.make, m.modelNo].filter(Boolean).join(' · '))}</small></span>${live && m.price > 0 ? `<em>${money(m.price)}</em>` : ''}</${live ? 'button' : 'div'}>`;
+    }).join('')}</div>` : '';
+    const setNote = inSet ? `<button class="set-promo" data-goto="${esc(inSet.id)}"><span>Also sold as a complete set</span><b>${esc(inSet.name)} · ${inSet.members.length} cars · ${money(inSet.price)}</b></button>` : '';
     const off = it.price > 0 && it.compareAt > it.price ? Math.round((1 - it.price / it.compareAt) * 100) : 0;
     $('#pdpInner').innerHTML = `
       <button class="icon-btn pdp-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -366,7 +395,7 @@
           <span class="price">${priceText(it)}${off ? `<s>${money(it.compareAt)}</s>` : ''}</span>
           ${off ? `<span class="save">You save ${money(it.compareAt - it.price)}</span>` : ''}
         </div>
-        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : 'Qty ' + it.qty + ' in stock'}${inCart ? ` · ${inCart} in your bag` : ''}</div>
+        <div class="stock-line${it.qty === 1 ? ' low' : ''}">${sold ? 'Sold out.' : it.isSet ? (it.qty > 1 ? it.qty + ' full sets available' : '1 full set available') : 'Qty ' + it.qty + ' in stock'}${inCart ? ` · ${inCart} in your bag` : ''}</div>
         ${sold ? '' : `<div class="buy-row">
           <div class="stepper" aria-label="Quantity">
             <button data-pq="-1" aria-label="Less" ${pdpQty <= 1 ? 'disabled' : ''}>−</button><span>${pdpQty}</span><button data-pq="1" aria-label="More" ${pdpQty >= room ? 'disabled' : ''}>+</button>
@@ -381,6 +410,8 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
             Share</button>
         </div>
+        ${setNote}
+        ${members}
         <dl class="specs">${specs.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
         ${it.notes ? `<p class="notes">${esc(it.notes)}</p>` : ''}
       </div>`;
@@ -416,6 +447,8 @@
     if (pq) { pdpQty += Number(pq.dataset.pq); return renderPdpKeepSlide(it); }
     if (e.target.closest('[data-pdp-add]')) { addToCart(it.id, pdpQty); pdpQty = 1; renderPdpKeepSlide(it); return; }
     if (e.target.closest('[data-ask]')) return askOne(it);
+    const go = e.target.closest('[data-goto]');
+    if (go && state.byId[go.dataset.goto]) { pdpQty = 1; return openItem(go.dataset.goto, false); }
     if (e.target.closest('[data-share]')) return share(it);
   });
   function renderPdpKeepSlide(it) {
@@ -500,7 +533,7 @@
       const q = Math.min(l.qty, it.qty);
       return `<div class="line">
         ${G.imgTag(it.photos[0], 160, it.name)}
-        <div><div class="t">${esc(it.name)}</div><div class="s">${esc(it.brand)} · ${priceText(it)}${q > 1 && it.price > 0 ? ' each' : ''}</div></div>
+        <div><div class="t">${esc(it.name)}</div><div class="s">${esc(it.isSet ? 'Complete set · ' + it.members.length + ' cars' : it.brand)} · ${priceText(it)}${q > 1 && it.price > 0 ? ' each' : ''}</div></div>
         <div class="r">
           <div class="stepper"><button data-cart-q="${esc(it.id)}" data-d="-1" aria-label="Less">−</button><span>${q}</span><button data-cart-q="${esc(it.id)}" data-d="1" aria-label="More" ${q >= it.qty ? 'disabled' : ''}>+</button></div>
           <button class="rm" data-cart-rm="${esc(it.id)}">Remove</button>
@@ -541,8 +574,9 @@
     try {
       const r = await G.timeout(G.post('enquiry', { name, contact, city, note, items: lines.map(l => ({ id: l.id, qty: l.qty })) }), 20000);
       const total = lines.reduce((s, l) => s + l.it.price * l.qty, 0);
+      const cars = lines.reduce((s, l) => s + l.qty * (l.it.isSet ? l.it.members.length : 1), 0);
       $('#cartDone').innerHTML = `<div class="done-ic">✓</div><h3>Order request sent</h3>
-        <p>Ref <b>${esc(r.enquiryId || '')}</b> · ${lines.length} car${lines.length > 1 ? 's' : ''} · ${money(total)}</p>
+        <p>Ref <b>${esc(r.enquiryId || '')}</b> · ${cars} car${cars > 1 ? 's' : ''} · ${money(total)}</p>
         <p class="muted">I'll reach out on <b>${esc(contact)}</b> to confirm availability, shipping and payment. Nothing is charged yet.</p>
         <button class="btn block" data-done-close>Keep browsing</button>`;
       state.cart = {};
@@ -578,7 +612,7 @@
   }
 
   function renderStats() {
-    $('#shelfCount').textContent = state.items.length;
+    $('#shelfCount').textContent = state.items.filter(i => !i.isSet).length;
   }
 
   function skeleton() {

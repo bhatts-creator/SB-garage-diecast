@@ -88,7 +88,8 @@
     $('#dlMakes').innerHTML = opts(COMMON_MAKES.concat(d.items.map(i => i.make)));
     $('#dlSeries').innerHTML = opts(d.items.map(i => i.series));
     $('#dlItems').innerHTML = d.items.slice().sort((a, b) => b.qty - a.qty)
-      .map(i => `<option value="${esc(i.id)} — ${esc(i.name)}">${i.qty > 0 ? i.qty + ' in stock' : 'sold out'} · ${money(i.price)}</option>`).join('');
+      .map(i => `<option value="${esc(i.id)} — ${esc(i.name)}">${i.qty > 0 ? i.qty + ' in stock' : 'sold out'} · ${money(i.price)}</option>`).join('') +
+      (d.sets || []).filter(x => x.members.length > 1).map(x => `<option value="${esc(x.id)} — Complete set: ${esc(x.name)}">${x.members.length} cars · ${money(x.price)}</option>`).join('');
     $('#dlBuyers').innerHTML = opts(d.sales.map(s => s.buyer));
     $('#dlTags').innerHTML = opts(d.sales.map(s => s.tag));
     $('#condSel').innerHTML = '<option value="">—</option>' + d.lists.conditions.map(c => `<option>${esc(c)}</option>`).join('');
@@ -729,8 +730,29 @@
     const r = e.target.closest('[data-lrm]');
     if (r) { S.sale.lines.splice(Number(r.dataset.lrm), 1); renderSaleLines(); }
   });
+  // a set sells as its cars: one line per car, set price split in proportion to their own prices
+  function setLines(id, qty) {
+    const x = (S.data.sets || []).find(z => z.id.toLowerCase() === String(id).toLowerCase());
+    if (!x) return null;
+    const ms = x.members.map(mid => S.byId[mid]).filter(Boolean);
+    if (!ms.length) return [];
+    const sum = ms.reduce((t, m) => t + (m.price || 0), 0);
+    const total = x.price || sum;
+    let left = total;
+    return ms.map((m, i) => {
+      const p = i === ms.length - 1 ? left : Math.round(total * (sum ? (m.price || 0) / sum : 1 / ms.length));
+      left -= p;
+      return { id: m.id, qty: qty || 1, price: p };
+    });
+  }
+  function addLines(lines) {
+    lines.forEach(l => { const ex = S.sale.lines.find(z => z.id === l.id); if (ex) ex.qty += l.qty; else S.sale.lines.push(l); });
+  }
+
   $('#linePick').addEventListener('change', e => {
     const id = e.target.value.split(' — ')[0].trim();
+    const sl = setLines(id, 1);
+    if (sl) { e.target.value = ''; addLines(sl); renderSaleLines(); return; }
     const it = S.byId[id] || S.data.items.find(i => i.id.toLowerCase() === id.toLowerCase());
     e.target.value = '';
     if (!it) { toast('Pick a car from the list', true); return; }
@@ -850,7 +872,12 @@
     const cv = e.target.closest('[data-convert]');
     if (cv) {
       const q = S.data.enquiries.find(x => x.id === cv.dataset.convert);
-      const lines = parseIds(q.itemIds).filter(l => S.byId[l.id]).map(l => ({ id: l.id, qty: l.qty, price: S.byId[l.id].price || 0 }));
+      const lines = [];
+      parseIds(q.itemIds).forEach(l => {
+        const sl = setLines(l.id, l.qty);
+        if (sl) { sl.forEach(x => lines.push(x)); return; }
+        if (S.byId[l.id]) lines.push({ id: l.id, qty: l.qty, price: S.byId[l.id].price || 0 });
+      });
       return openSale({ lines, buyer: q.name, contact: q.contact, city: q.city, channel: 'Website', enquiryId: q.id });
     }
     const b = e.target.closest('[data-lost],[data-reopen]');

@@ -88,8 +88,18 @@ The **Review** column tells you what the AI was unsure about ("medium confidence
 | Photo, Web Photos | Drive file IDs or any image URLs (one per line). Managed by the admin panel. |
 | Added On | Auto. |
 | Review | Private notes from the AI / bulk upload. Clear once checked. |
+| Model No | Number printed on the card/box, e.g. `72/250`, `HRV11`, `#612`. Searchable. |
+| Set | Give every car of a set the same name, e.g. `Car Culture Deutschland Design (5)`. See **Complete sets** below. |
 
 **Drafts:** any row with an ID but no Name or no Price is highlighted yellow and stays off the store.
+
+### Complete sets (sell a full set as one package)
+
+1. In **Inventory → Set**, type the same set name on every car of the set.
+2. The name appears in the **Sets** tab on its own. Put the package price in **Price** there (tick **Hide** to pull it).
+3. The store shows a **Complete set** card (and a "Complete sets" tab) with all the cars, the package price and "save ₹X" against buying them one by one. Each car's page links to its set.
+4. The set is buyable only while **every** car in it has Qty ≥ 1. The cars still sell individually too; once one sells out, the set card disappears.
+5. Recording the sale: in admin **+ Record sale**, pick `SET-… — Complete set: …` (or convert the enquiry). It splits into one line per car with the package price shared in proportion to each car's own price, so stock and profit stay per car.
 
 ---
 

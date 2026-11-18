@@ -14,6 +14,7 @@
     { key: 'TH', short: 'TH', label: 'Treasure Hunt', rank: 80, cls: 'b-th', aliases: ['th', 'treasure hunt', 'regular th'] },
     { key: 'Chase', short: 'Chase', label: 'Chase', rank: 75, cls: 'b-chase', aliases: ['chase', 'chase car'] },
     { key: 'Rare', short: 'Rare', label: 'Rare', rank: 70, cls: 'b-rare', aliases: ['rare', 'grail', 'limited'] },
+    { key: 'Complete Set', short: 'Set', label: 'Complete set', rank: 60, cls: 'b-set', aliases: ['complete set', 'full set', 'set', 'bundle', 'package'] },
     { key: 'Team Transport', short: 'Team Transport', label: 'Team Transport', rank: 50, cls: 'b-tt', aliases: ['team transport', 'tt', 'transport'] },
     { key: 'Premium', short: 'Premium', label: 'Premium', rank: 45, cls: 'b-prem', aliases: ['premium', 'prem'] },
     { key: 'Silver Series', short: 'Silver', label: 'Silver Series', rank: 35, cls: 'b-silver', aliases: ['silver series', 'silver', 'ss'] },

@@ -58,6 +58,13 @@
 
   window.G64_DEMO_CATALOG = () => ({
     ok: true,
+    sets: [{
+      id: 'SET-mini-gt-supercar-trio', name: 'Mini GT Supercar Trio', price: 4999, notes: 'All three boxed, never opened.',
+      members: ['MGT-0003', 'MGT-0005', 'MGT-0024'].map(id => raw.findIndex(r => r[0] === id)).map(i => ({
+        id: raw[i][0], name: raw[i][1], brand: raw[i][2], make: raw[i][3], series: raw[i][4], year: raw[i][5], modelNo: raw[i][4].replace('Mini GT ', ''),
+        tags: raw[i][8].split(',').map(s => s.trim()), price: raw[i][9], qty: raw[i][11], photos: [art(raw[i][12], raw[i][13], BG[i % 4])],
+      })),
+    }],
     settings: {
       storeName: "SB's Garage",
       tagline: '1:64 grails, straight off my shelf.',
@@ -72,7 +79,7 @@
       tags: r[8].split(',').map(s => s.trim()), price: r[9], compareAt: r[10], qty: r[11],
       photos: [art(r[12], r[13], BG[i % 4]), art(r[12], r[13], BG[(i + 1) % 4]), art(r[12], r[13], BG[(i + 2) % 4])],
       notes: i % 3 === 0 ? 'Card is clean, blister uncracked. Ships in a protector.' : '',
-      added: now - r[14] * 1.3 * DAY, n: i + 2,
+      added: now - r[14] * 1.3 * DAY, n: i + 2, set: ['MGT-0003', 'MGT-0005', 'MGT-0024'].includes(r[0]) ? 'Mini GT Supercar Trio' : '',
     })),
   });
 })();

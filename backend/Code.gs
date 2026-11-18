@@ -31,6 +31,7 @@ const CFG = {
   INV: 'Inventory',
   SALES: 'Sales',
   ENQ: 'Enquiries',
+  SETS: 'Sets',
   SETTINGS: 'Settings',
   DASH: 'Dashboard',
   CACHE_KEY: 'g64_catalog',
@@ -43,9 +44,10 @@ const CFG = {
 
 const HEADERS = {};
 HEADERS[CFG.INV] = ['ID', 'Thumb', 'Name', 'Brand', 'Manufacturer', 'Series', 'Year', 'Color', 'Condition',
-  'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review', 'Model No', 'Photo Hash'];
+  'Tags', 'Price', 'Compare At', 'Qty', 'Cost', 'Hide', 'Notes', 'Photo', 'Web Photos', 'Added On', 'Review', 'Model No', 'Photo Hash', 'Set'];
 HEADERS[CFG.SALES] = ['Order ID', 'Date', 'Item ID', 'Item Name', 'Brand', 'Qty', 'Unit Price', 'Total',
   'Unit Cost', 'Profit', 'Buyer', 'Contact', 'City', 'Channel', 'Payment', 'Revenue Tag', 'Enquiry ID', 'Notes'];
+HEADERS[CFG.SETS] = ['Set', 'Price', 'Hide', 'Notes'];
 HEADERS[CFG.ENQ] = ['Enquiry ID', 'Date', 'Name', 'Contact', 'City', 'Buyer Note', 'Items', 'Item IDs', 'Total', 'Status', 'Notes'];
 
 const FORMULA_COLS = ['Thumb']; // never written by the script
@@ -65,7 +67,7 @@ const DEFAULT_SETTINGS = [
 const FIELD_TO_COL = {
   name: 'Name', brand: 'Brand', make: 'Manufacturer', series: 'Series', year: 'Year', color: 'Color',
   condition: 'Condition', tags: 'Tags', price: 'Price', compareAt: 'Compare At', qty: 'Qty', cost: 'Cost',
-  hidden: 'Hide', notes: 'Notes', review: 'Review', modelNo: 'Model No', photoHash: 'Photo Hash',
+  hidden: 'Hide', notes: 'Notes', review: 'Review', modelNo: 'Model No', photoHash: 'Photo Hash', set: 'Set',
 };
 const NUMERIC_FIELDS = ['price', 'compareAt', 'qty', 'cost'];
 
@@ -100,7 +102,7 @@ const ID_PREFIX = {
 /* ═════════════════════════════  HTTP API  ═════════════════════════════ */
 
 /** First request after deploying sets the sheet up by itself — no need to run setup() by hand. */
-const SETUP_VERSION = 6;
+const SETUP_VERSION = 7;
 function ensureSetup_() {
   const cache = CacheService.getScriptCache();
   if (cache.get('setup_ok_' + SETUP_VERSION)) return; // versioned: new code re-checks the sheet at once
@@ -213,7 +215,13 @@ function buildCatalog_() {
     delete it.review;
     items.push(it);
   });
-  return { ok: true, settings: settings, items: items, generatedAt: new Date().toISOString() };
+  try { syncSetNames_(t); } catch (e) { /* Sets tab missing until setup runs */ }
+  const sets = readSets_(t).filter(x => !x.hidden && x.price > 0 && x.members.length >= 2).map(x => ({
+    id: x.id, name: x.name, price: x.price, notes: x.notes,
+    members: x.members.map(m => ({ id: m.id, name: m.name, brand: m.brand, make: m.make, series: m.series, year: m.year,
+      modelNo: m.modelNo, tags: m.tags, price: m.price, qty: m.qty, photos: m.photos.slice(0, 1) })),
+  }));
+  return { ok: true, settings: settings, items: items, sets: sets, generatedAt: new Date().toISOString() };
 }
 
 function itemFromRow_(t, r) {
@@ -236,10 +244,61 @@ function itemFromRow_(t, r) {
     notes: str_(get_(t, r, 'Notes')),
     review: str_(get_(t, r, 'Review')),
     modelNo: str_(get_(t, r, 'Model No')), // number printed on the card, e.g. 72/250 or HRV11
+    set: str_(get_(t, r, 'Set')),           // cars sharing a Set name can also be sold together (see Sets tab)
     photos: photosOf_(t, r),
     added: added instanceof Date ? added.getTime() : (Date.parse(added) || 0),
     n: r.row,
   };
+}
+
+/* ── sets: cars that share a "Set" name in Inventory; price lives in the Sets tab ── */
+function setId_(name) { return 'SET-' + str_(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40); }
+
+function readSets_(inv) {
+  inv = inv || readTable_(CFG.INV);
+  const byName = {};
+  inv.rows.forEach(r => {
+    const it = itemFromRow_(inv, r);
+    if (!it.id || !it.set || it.hidden) return;
+    const k = it.set.toLowerCase();
+    (byName[k] = byName[k] || []).push(it);
+  });
+  const sh = ss_().getSheetByName(CFG.SETS);
+  if (!sh) return [];
+  const st = readTable_(CFG.SETS);
+  return st.rows.filter(r => str_(get_(st, r, 'Set'))).map(r => {
+    const name = str_(get_(st, r, 'Set'));
+    return {
+      id: setId_(name), name: name, price: num_(get_(st, r, 'Price')) || 0,
+      hidden: truthy_(get_(st, r, 'Hide')), notes: str_(get_(st, r, 'Notes')),
+      members: byName[name.toLowerCase()] || [],
+    };
+  });
+}
+
+function findSet_(id, inv) {
+  return readSets_(inv).filter(x => x.id === id && !x.hidden)[0] || null;
+}
+
+/** Adds a Sets row for every Set name used in Inventory that has no row yet. */
+function syncSetNames_(inv) {
+  const sh = ss_().getSheetByName(CFG.SETS);
+  if (!sh) return;
+  const st = readTable_(CFG.SETS);
+  const have = st.rows.map(r => str_(get_(st, r, 'Set')).toLowerCase());
+  inv = inv || readTable_(CFG.INV);
+  if (inv.idx['Set'] == null) return;
+  const seen = {};
+  // the Hide checkboxes fill the whole column, so appendRow would land at the very bottom: reuse the first blank row
+  const blanks = st.rows.filter(r => !str_(get_(st, r, 'Set'))).map(r => r.row);
+  inv.rows.forEach(r => {
+    const n = str_(get_(inv, r, 'Set'));
+    if (!n || have.indexOf(n.toLowerCase()) >= 0 || seen[n.toLowerCase()]) return;
+    seen[n.toLowerCase()] = 1;
+    const row = blanks.length ? blanks.shift() : sh.getLastRow() + 1;
+    if (row > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 50);
+    sh.getRange(row, 1).setValue(n);
+  });
 }
 
 function photosOf_(t, r) {
@@ -302,6 +361,7 @@ function adminData_() {
   }));
   return {
     items: items, sales: sales, enquiries: enquiries, settings: readSettings_(),
+    sets: readSets_(inv).map(x => ({ id: x.id, name: x.name, price: x.price, hidden: x.hidden, members: x.members.map(m => m.id) })),
     lists: { brands: BRANDS, conditions: CONDITIONS, channels: CHANNELS, payments: PAYMENTS },
     hasSearchKey: !!(prop_('SERPAPI_KEY') || prop_('BRAVE_API_KEY')),
     hasAiKey: !!aiProvider_(),
@@ -823,6 +883,15 @@ function publicEnquiry_(body) {
     const desc = [];
     const ids = [];
     req.forEach(x => {
+      if (x && /^SET-/.test(str_(x.id))) {
+        const set = findSet_(str_(x.id), inv);
+        if (!set || !(set.price > 0)) return;
+        const sq = Math.max(1, Math.min(9, Math.floor(num_(x.qty) || 1)));
+        total += set.price * sq;
+        desc.push('Complete set: ' + set.name + ' [' + set.members.map(m => m.id).join(' + ') + '] ×' + sq + ' @ ₹' + set.price);
+        ids.push(set.id + (sq > 1 ? '×' + sq : ''));
+        return;
+      }
       const r = findRow_(inv, 'ID', x && x.id);
       if (!r || truthy_(get_(inv, r, 'Hide'))) return;
       const q = Math.max(1, Math.min(99, Math.floor(num_(x.qty) || 1)));
@@ -1003,9 +1072,10 @@ function onEdit(e) {
   try {
     const sh = e.range.getSheet();
     const name = sh.getName();
-    if (name === CFG.INV || name === CFG.SETTINGS) bustCache_();
+    if (name === CFG.INV || name === CFG.SETTINGS || name === CFG.SETS) bustCache_();
     if (name !== CFG.INV || e.range.getRow() < 2) return;
     fillMissingIds_(e.range.getRow(), e.range.getNumRows(), true);
+    syncSetNames_(); // a new Set name in Inventory gets its own row in the Sets tab
   } catch (err) { /* simple triggers must never throw */ }
 }
 
@@ -1114,6 +1184,21 @@ function setup() {
   // add settings introduced in newer versions
   const have = set.getDataRange().getValues().map(r => str_(r[0]));
   DEFAULT_SETTINGS.filter(s => have.indexOf(s[0]) < 0).forEach(s => set.appendRow(s));
+
+  // Sets: one row per set name; members are the Inventory rows with the same "Set" value
+  let sets = ss.getSheetByName(CFG.SETS);
+  if (!sets) {
+    sets = ss.insertSheet(CFG.SETS);
+    sets.getRange(1, 1, 1, HEADERS[CFG.SETS].length).setValues([HEADERS[CFG.SETS]]);
+    sets.setColumnWidth(1, 320);
+    sets.setColumnWidth(4, 360);
+    sets.getRange(2, 2, sets.getMaxRows() - 1, 1).setNumberFormat('₹#,##0');
+    sets.getRange(2, 3, sets.getMaxRows() - 1, 1).insertCheckboxes();
+    styleHeader_(sets);
+    sets.getRange(1, 4).setNote('Give cars the same name in the Inventory "Set" column, then put the set price here. ' +
+      'The set shows on the store while every car in it is in stock.');
+  }
+  syncSetNames_();
 
   buildDashboard_();
 

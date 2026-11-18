@@ -274,6 +274,24 @@ body { font-family: var(--font); background: var(--bg); }
 .pdp-actions .btn { flex: 1; }
 .pdp .stock-line { font-family: var(--cond); font-size: 16px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
 
+/* ── sets ── */
+.set-promo {
+  display: grid; gap: 2px; text-align: left; padding: 12px 14px; border: 1.5px dashed var(--red); background: rgba(214, 69, 48, .08); color: var(--ink);
+}
+.set-promo span { font-family: var(--cond); font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--red); font-weight: 600; }
+.set-promo b { font-weight: 600; font-size: 15px; }
+.set-promo:hover { background: rgba(214, 69, 48, .16); }
+.set-list { display: grid; gap: 6px; }
+.set-list h3 { margin: 0 0 4px; font-family: var(--cond); font-size: 15px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+.set-row { display: grid; grid-template-columns: 48px 1fr auto; gap: 12px; align-items: center; padding: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); text-align: left; width: 100%; }
+button.set-row:hover { border-color: var(--ink-3); }
+.set-row img { width: 48px; height: 48px; object-fit: cover; }
+.set-row span { display: grid; min-width: 0; }
+.set-row b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-row small { color: var(--ink-3); font-size: 12.5px; }
+.set-row em { font-style: normal; color: var(--ink-3); font-size: 13px; padding-right: 6px; }
+.card.is-set { outline: 1.5px solid var(--red); outline-offset: -1.5px; }
+
 /* ── bag drawer ── */
 .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(10, 12, 16, .6); backdrop-filter: blur(2px); }
 .drawer {

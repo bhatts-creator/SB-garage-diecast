@@ -105,6 +105,7 @@ a { color: inherit; }
 .b-tt { background: #1f6feb; color: #fff; border-color: #6aa3ff; }
 .b-prem { background: #6d4aff; color: #fff; border-color: #a891ff; }
 .b-silver { background: linear-gradient(135deg, #e6e8ec, #8d939d); color: #15171b; border-color: #f2f3f5; }
+.b-set { background: #d64530; color: #fff; border-color: #ff8a7a; }
 .b-5pk { background: #0fb5a4; color: #031b18; border-color: #63e6d8; }
 .b-main { background: rgba(20, 22, 27, .85); color: var(--ink-2); }
 
